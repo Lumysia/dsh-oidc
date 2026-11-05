@@ -719,6 +719,7 @@ describe(
         )
         await deniedPage.goto(`${publicOrigin}/auth/login`)
         expect((await deniedCallback).status()).toBe(403)
+        await deniedPage.waitForURL(`${publicOrigin}/auth/callback**`, { waitUntil: 'load' })
         const cookies = await deniedContext.cookies(publicOrigin)
         expect(cookies.some((cookie) => cookie.name.startsWith('dsh-auth-'))).toBe(false)
         expect(cookies.some((cookie) => cookie.name === '__Host-dsh-oidc-session')).toBe(false)
