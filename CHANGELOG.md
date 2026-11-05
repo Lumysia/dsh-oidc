@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: after a real provider's consent page the browser arrived at DSH cross-site, so DSH's `SameSite=Strict` cookie was set but never sent and the user saw "authentication required". The callback now answers with a small same-origin page that continues to DSH's token exchange, making that hop same-site.
 - Add `directLogin`: signed-out browser navigations go straight to the provider instead of the bundled sign-in page. Off by default.
 - Fix: compare the ID token `iss` with the issuer exactly as configured. A bare-origin issuer such as `https://id.example` was normalized to `https://id.example/` and every login was denied.
 

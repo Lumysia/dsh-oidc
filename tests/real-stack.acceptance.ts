@@ -67,6 +67,11 @@ interface Page {
     inputValue(): Promise<string>
   }
   waitForNavigation(options?: Record<string, unknown>): Promise<{ status(): number } | null>
+  waitForURL(url: string, options?: Record<string, unknown>): Promise<void>
+  waitForResponse(
+    predicate: (response: { url(): string }) => boolean,
+  ): Promise<{ status(): number }>
+  reload(options?: Record<string, unknown>): Promise<{ status(): number } | null>
   evaluate<R, A>(callback: (argument: A) => R | Promise<R>, argument: A): Promise<R>
 }
 
@@ -319,7 +324,12 @@ async function startProvider(): Promise<void> {
         const callback = new URL(redirectUri)
         callback.searchParams.set('code', code)
         callback.searchParams.set('state', state)
-        response.writeHead(302, { location: callback.href }).end()
+        // Like a real provider's consent page: the browser leaves the provider's
+        // site through a document navigation, so the callback is cross-site.
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end(
+          `<!doctype html><meta http-equiv="refresh" content="0;url=${callback.href.replaceAll('&', '&amp;')}">`,
+        )
         return
       }
       if (url.pathname === '/token' && request.method === 'POST') {
@@ -702,7 +712,14 @@ describe(
       providerSubject = 'synthetic-denied'
       try {
         const deniedPage = await deniedContext.newPage()
-        expect((await deniedPage.goto(`${publicOrigin}/auth/login`))?.status()).toBe(403)
+        // The provider leaves through a document refresh (see /authorize), so
+        // wait for the callback's own response instead of the first document.
+        const deniedCallback = deniedPage.waitForResponse((r) =>
+          r.url().startsWith(`${publicOrigin}/auth/callback`),
+        )
+        await deniedPage.goto(`${publicOrigin}/auth/login`)
+        expect((await deniedCallback).status()).toBe(403)
+        await deniedPage.waitForURL(`${publicOrigin}/auth/callback**`, { waitUntil: 'load' })
         const cookies = await deniedContext.cookies(publicOrigin)
         expect(cookies.some((cookie) => cookie.name.startsWith('dsh-auth-'))).toBe(false)
         expect(cookies.some((cookie) => cookie.name === '__Host-dsh-oidc-session')).toBe(false)
@@ -717,10 +734,13 @@ describe(
 
     it('uses the real browser for OIDC, native bootstrap, root, API, upload, and WebSocket', async () => {
       if (page === undefined || context === undefined) throw new Error('browser context absent')
-      const response = await page.goto(`${publicOrigin}/auth/login`, {
-        waitUntil: 'domcontentloaded',
-      })
-      expect(response?.status()).toBe(200)
+      // Provider page -> callback page -> native token exchange -> clean root.
+      // Every hop after the provider is a same-site navigation, which is what
+      // lets the browser send DSH's SameSite=Strict cookie on the last one.
+      await page.goto(`${publicOrigin}/auth/login`)
+      await page.waitForURL(`${publicOrigin}/`, { waitUntil: 'domcontentloaded' })
+      const root = await page.reload({ waitUntil: 'domcontentloaded' })
+      expect(root?.status()).toBe(200)
       expect(page.url()).toBe(`${publicOrigin}/`)
       expect(await page.title()).toBe('DeepSeek Harness')
       const cookies = await context.cookies(publicOrigin)

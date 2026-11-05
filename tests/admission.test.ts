@@ -334,8 +334,13 @@ describe('OIDC route admission', () => {
       request('GET', `/auth/callback?code=code&state=${started.state}`, { cookie: started.cookie }),
       callback.value,
     )
-    expect(callback.captured.status).toBe(303)
-    expect(callback.captured.headers?.location).toBe('https://dsh.example/?token=native-bootstrap')
+    // A same-origin page, not a redirect, so the follow-up navigation is
+    // same-site and the browser sends DSH's SameSite=Strict native cookie.
+    expect(callback.captured.status).toBe(200)
+    expect(callback.captured.headers?.location).toBeUndefined()
+    expect(String(callback.captured.body)).toContain(
+      'http-equiv="refresh" content="0;url=https://dsh.example/?token=native-bootstrap"',
+    )
     const session = cookieFrom(callback.captured.headers, SESSION_COOKIE)
     expect(session).not.toContain('allowed')
     expect(protocol.callbackChecks).toMatchObject({
@@ -450,7 +455,7 @@ describe('OIDC route admission', () => {
       request('GET', `/auth/callback?code=code&state=${started.state}`, { cookie: started.cookie }),
       callback.value,
     )
-    expect(callback.captured.status).toBe(303)
+    expect(callback.captured.status).toBe(200)
   })
 
   it('rejects transaction cookie and state from different login attempts', async () => {
