@@ -247,10 +247,11 @@ export class OidcAdmission {
     if (!this.trustedRequest(req)) return plain(res, 403, 'forbidden\n', req.method === 'HEAD')
     const session = this.sessions.read(this.sessionValue(req))
     if (session !== undefined) return plain(res, 204, '', req.method === 'HEAD')
-    // Browser navigations are redirected to the bundled sign-in page so the
-    // forward_auth gate presents human-friendly UX; every other client
-    // (fetch/XHR/API/WebSocket subrequests) keeps the plain 401 contract.
-    if (req.method === 'GET' && wantsNavigation(req)) return redirect(res, '/auth/signin')
+    // Browser navigations go to the bundled sign-in page, or straight to the
+    // provider with `directLogin`; every other client (fetch/XHR/API/WebSocket
+    // subrequests) keeps the plain 401 contract.
+    if (req.method === 'GET' && wantsNavigation(req))
+      return redirect(res, this.config.directLogin ? '/auth/login?nav=1' : '/auth/signin')
     plain(res, 401, 'unauthorized\n', req.method === 'HEAD')
   }
 

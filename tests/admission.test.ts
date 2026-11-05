@@ -185,6 +185,34 @@ describe('OIDC route admission', () => {
     expect(method.captured).toMatchObject({ status: 405, headers: { allow: 'GET, HEAD' } })
   })
 
+  it('sends signed-out navigations straight to the provider with directLogin', async () => {
+    const direct = resolveConfig({
+      issuer: 'https://id.example/issuer',
+      clientId: 'client',
+      publicOrigin: 'https://dsh.example',
+      allowedSubjects: [{ issuer: 'https://id.example/issuer', subject: 'allowed' }],
+      directLogin: true,
+    })
+    const admission = new OidcAdmission(
+      direct,
+      { resolve: vi.fn(async () => undefined) },
+      { authenticatedUrl: (origin) => origin },
+      new FakeProtocol(),
+      { info: () => undefined, warn: () => undefined },
+    )
+    const navigation = response()
+    admission.check(
+      request('GET', '/auth/check', { accept: 'text/html,application/xhtml+xml' }),
+      navigation.value,
+    )
+    expect(navigation.captured.status).toBe(303)
+    expect(navigation.captured.headers?.location).toBe('/auth/login?nav=1')
+
+    const api = response()
+    admission.check(request('GET', '/auth/check', { accept: '*/*' }), api.value)
+    expect(api.captured.status).toBe(401)
+  })
+
   it('answers HEAD login without creating transaction state', async () => {
     const { admission, protocol } = harness()
     const start = vi.spyOn(protocol, 'start')
