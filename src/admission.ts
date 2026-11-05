@@ -212,7 +212,7 @@ export class OidcAdmission {
         state: transaction.state,
         currentUrl,
       })
-      const principal = authorizeClaims(claims, this.config.issuer.href, this.config.policy)
+      const principal = authorizeClaims(claims, this.config.issuerId, this.config.policy)
       if (principal === undefined) {
         this.logger.warn(`dsh-oidc policy denied correlation=${correlation}`)
         return plain(res, 403, 'access denied\n')

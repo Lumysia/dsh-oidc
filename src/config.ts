@@ -78,6 +78,8 @@ export interface AuthorizationPolicy {
 
 export interface ResolvedConfig {
   readonly issuer: URL
+  /** The issuer exactly as configured, compared byte for byte with the ID token `iss`. */
+  readonly issuerId: string
   readonly clientId: string
   readonly clientSecretRef?: CredentialRef
   readonly publicOrigin: URL
@@ -203,7 +205,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
     throw new Error('dsh-oidc: allowedGroups must not be explicitly empty')
   const allowedSubjects = (config.allowedSubjects ?? []).map(
     ({ issuer: allowedIssuer, subject }) => {
-      const exactIssuer = exactHttpsUrl(allowedIssuer, 'allowedSubjects.issuer').href
+      exactHttpsUrl(allowedIssuer, 'allowedSubjects.issuer')
+      const exactIssuer = allowedIssuer
       const [exactSubject] = exactStrings([subject], 'allowedSubjects.subject')
       return `${exactIssuer}\u0000${exactSubject}`
     },
@@ -238,6 +241,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     throw new Error('dsh-oidc: session idle timeout must not exceed absolute lifetime')
   return {
     issuer,
+    issuerId: config.issuer,
     clientId: config.clientId,
     ...(config.clientSecretRef === undefined
       ? {}

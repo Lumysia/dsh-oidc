@@ -389,7 +389,7 @@ describe('OIDC route admission', () => {
     })
 
     protocol.startError = false
-    protocol.claims = { iss: config.issuer.href, sub: 'denied' }
+    protocol.claims = { iss: config.issuerId, sub: 'denied' }
     const second = await login(admission)
     const denied = response()
     await admission.callback(
@@ -397,6 +397,32 @@ describe('OIDC route admission', () => {
       denied.value,
     )
     expect(denied.captured.status).toBe(403)
+  })
+
+  it('admits a bare-origin issuer whose ID token iss has no trailing slash', async () => {
+    const bare = resolveConfig({
+      issuer: 'https://id.example',
+      clientId: 'client',
+      clientSecretRef: 'OIDC_SECRET',
+      publicOrigin: 'https://dsh.example',
+      allowedSubjects: [{ issuer: 'https://id.example', subject: 'allowed' }],
+    })
+    const protocol = new FakeProtocol()
+    protocol.claims = { iss: 'https://id.example', sub: 'allowed' }
+    const admission = new OidcAdmission(
+      bare,
+      { resolve: vi.fn(async () => ({ value: 'rotating-secret', source: 'test' })) },
+      { authenticatedUrl: (origin) => `${origin}?token=native-bootstrap` },
+      protocol,
+      { info: () => undefined, warn: () => undefined },
+    )
+    const started = await login(admission)
+    const callback = response()
+    await admission.callback(
+      request('GET', `/auth/callback?code=code&state=${started.state}`, { cookie: started.cookie }),
+      callback.value,
+    )
+    expect(callback.captured.status).toBe(303)
   })
 
   it('rejects transaction cookie and state from different login attempts', async () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: compare the ID token `iss` with the issuer exactly as configured. A bare-origin issuer such as `https://id.example` was normalized to `https://id.example/` and every login was denied.
+
 ## 0.3.0-alpha.0 - Unreleased
 
 First release of the Lumysia/dsh-oidc fork. The OIDC, session, policy, and proxy design from Senti100/dsh-oidc is unchanged.
