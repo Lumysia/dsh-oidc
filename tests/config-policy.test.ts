@@ -19,6 +19,45 @@ describe('configuration and policy', () => {
     expect(config.scopes).toContain('openid')
   })
 
+  it('defaults trusted proxies to loopback and parses addresses and CIDR ranges', () => {
+    const defaults = resolveConfig(base).trustedProxies
+    expect(defaults.entries).toEqual(['127.0.0.0/8', '::1'])
+    expect(defaults.has('127.0.0.1')).toBe(true)
+    expect(defaults.has('127.8.9.10')).toBe(true)
+    expect(defaults.has('::1')).toBe(true)
+    expect(defaults.has('::ffff:127.0.0.1')).toBe(true)
+    expect(defaults.has('10.0.0.1')).toBe(false)
+    expect(defaults.has('not-an-ip')).toBe(false)
+
+    const custom = resolveConfig({
+      ...base,
+      trustedProxies: ['10.0.0.0/8', '192.0.2.7', 'fd12:3456::/48', '::ffff:198.51.100.0/24'],
+    }).trustedProxies
+    expect(custom.has('10.200.0.1')).toBe(true)
+    expect(custom.has('192.0.2.7')).toBe(true)
+    expect(custom.has('192.0.2.8')).toBe(false)
+    expect(custom.has('fd12:3456:0:1::9')).toBe(true)
+    expect(custom.has('fd12:3457::1')).toBe(false)
+    expect(custom.has('198.51.100.4')).toBe(true)
+    expect(custom.has('127.0.0.1')).toBe(false)
+  })
+
+  it.each([
+    [[], /explicitly empty/u],
+    [['0.0.0.0/0'], /every address/u],
+    [['::/0'], /every address/u],
+    [['10.0.0.0/33'], /invalid prefix/u],
+    [['fd00::/129'], /invalid prefix/u],
+    [['10.0.0.0/08'], /invalid prefix/u],
+    [['10.0.0.0/'], /invalid prefix/u],
+    [['10.0.0.0/8/8'], /not an IP or CIDR/u],
+    [['proxy.internal'], /not an IP or CIDR/u],
+    [[' 10.0.0.1'], /exact strings/u],
+    [['10.0.0.1', '10.0.0.1'], /duplicates/u],
+  ])('rejects invalid trustedProxies %#', (trustedProxies, pattern) => {
+    expect(() => resolveConfig({ ...base, trustedProxies })).toThrow(pattern)
+  })
+
   it.each([
     [{ ...base, issuer: 'http://id.example' }, /HTTPS/u],
     [{ ...base, publicOrigin: 'https://dsh.example/path' }, /path \/?/u],

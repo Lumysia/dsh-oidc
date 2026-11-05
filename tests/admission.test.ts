@@ -202,7 +202,7 @@ describe('OIDC route admission', () => {
     expect(mapped.captured.status).toBe(204)
   })
 
-  it('trusts one proxy-set client IP only from loopback and rejects spoofed or malformed values', async () => {
+  it('by default trusts one proxy-set client IP only from loopback and rejects spoofed or malformed values', async () => {
     const { admission } = harness()
     for (const req of [
       request('GET', '/auth/login', { [CLIENT_IP_HEADER]: '192.0.2.10' }, undefined, '10.0.0.9'),
@@ -215,6 +215,40 @@ describe('OIDC route admission', () => {
       await admission.login(req, res.value)
       expect(res.captured.status).toBe(403)
     }
+  })
+
+  it('trusts the client IP header from a configured proxy network and nowhere else', async () => {
+    const protocol = new FakeProtocol()
+    const proxied = new OidcAdmission(
+      resolveConfig({
+        issuer: 'https://id.example/issuer',
+        clientId: 'client',
+        clientSecretRef: 'OIDC_SECRET',
+        publicOrigin: 'https://dsh.example',
+        allowedSubjects: [{ issuer: 'https://id.example/issuer', subject: 'allowed' }],
+        trustedProxies: ['172.18.0.0/16', 'fd00::5'],
+      }),
+      { resolve: vi.fn(async () => ({ value: 'rotating-secret', source: 'test' })) },
+      { authenticatedUrl: (origin) => origin },
+      protocol,
+      { info: () => undefined, warn: () => undefined },
+    )
+    const statusFrom = async (peer: string, headers: Record<string, string> = {}) => {
+      const res = response()
+      await proxied.login(request('GET', '/auth/login', headers, undefined, peer), res.value)
+      return res.captured.status
+    }
+    // Docker-network proxy, IPv4-mapped form of it, and an exact IPv6 proxy are trusted.
+    expect(await statusFrom('172.18.0.3')).toBe(303)
+    expect(await statusFrom('::ffff:172.18.0.3')).toBe(303)
+    expect(await statusFrom('fd00::5')).toBe(303)
+    // Loopback is no longer trusted once the list is replaced, and other peers never are.
+    expect(await statusFrom('127.0.0.1')).toBe(403)
+    expect(await statusFrom('172.19.0.3')).toBe(403)
+    expect(await statusFrom('fd00::6')).toBe(403)
+    // A trusted proxy still has to send exactly one valid address.
+    expect(await statusFrom('172.18.0.3', { [CLIENT_IP_HEADER]: 'not-an-ip' })).toBe(403)
+    expect(await statusFrom('172.18.0.3', { [CLIENT_IP_HEADER]: '192.0.2.1, 192.0.2.2' })).toBe(403)
   })
 
   it('rate limits one client without denying a distinct client', async () => {

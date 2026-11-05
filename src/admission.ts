@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isIP } from 'node:net'
 import type { CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
-import type { ResolvedConfig } from './config.js'
+import type { ResolvedConfig, TrustedProxies } from './config.js'
 import type { OidcProtocol } from './oidc.js'
 import { authorizeClaims } from './policy.js'
 import {
@@ -57,19 +57,10 @@ function normalizedIp(value: string): string | undefined {
   return undefined
 }
 
-function loopbackPeer(req: IncomingMessage): boolean {
+/** The proxy-set client address, believed only when the socket peer is a configured trusted proxy. */
+function trustedClientIp(req: IncomingMessage, proxies: TrustedProxies): string | undefined {
   const peer = req.socket.remoteAddress
-  if (peer === undefined) return false
-  const normalized = normalizedIp(peer)
-  return (
-    normalized === '::1' ||
-    normalized?.startsWith('127.') === true ||
-    normalized?.startsWith('::ffff:127.') === true
-  )
-}
-
-function trustedClientIp(req: IncomingMessage): string | undefined {
-  if (!loopbackPeer(req)) return undefined
+  if (peer === undefined || !proxies.has(peer)) return undefined
   const raw = req.headers[CLIENT_IP_HEADER]
   if (typeof raw !== 'string') return undefined
   return normalizedIp(raw)
@@ -177,7 +168,7 @@ export class OidcAdmission {
     if (req.method !== 'GET' && req.method !== 'HEAD') return methodNotAllowed(res, 'GET, HEAD')
     if (!this.trustedRequest(req)) return plain(res, 403, 'forbidden\n')
     if (header(req, 'sec-fetch-site') === 'cross-site') return plain(res, 403, 'forbidden\n')
-    const clientIp = trustedClientIp(req)
+    const clientIp = trustedClientIp(req, this.config.trustedProxies)
     if (clientIp === undefined) return plain(res, 403, 'forbidden\n')
     if (req.method === 'HEAD') return plain(res, 204, '', true)
     if (!this.limiter.admit(clientIp)) return plain(res, 429, 'too many requests\n')
