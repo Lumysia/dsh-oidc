@@ -4,10 +4,10 @@ import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 
 /** Host-only OIDC admission configuration. */
 export interface Config {
-  issuer: string
-  clientId: string
+  issuer?: string
+  clientId?: string
   clientSecretRef?: string
-  publicOrigin: string
+  publicOrigin?: string
   scopes?: string[]
   sessionMaxAgeSeconds?: number
   sessionIdleTimeoutSeconds?: number
@@ -32,10 +32,12 @@ export interface Config {
 export const DEFAULT_TRUSTED_PROXIES: readonly string[] = ['127.0.0.0/8', '::1']
 
 export const Config: z<Config> = z.object({
-  issuer: z.string().required(),
-  clientId: z.string().required(),
+  // Required, but checked by resolveConfig after the DSH_OIDC_* environment is
+  // applied, so a bundle row without config can take every value from there.
+  issuer: z.string(),
+  clientId: z.string(),
   clientSecretRef: z.string(),
-  publicOrigin: z.string().required(),
+  publicOrigin: z.string(),
   scopes: z.array(String).default(['openid', 'profile', 'email']),
   sessionMaxAgeSeconds: z
     .natural()
@@ -192,14 +194,22 @@ function exactStrings(values: readonly string[] | undefined, field: string): rea
 
 /** Validate configuration before any route is registered. */
 export function resolveConfig(config: Config): ResolvedConfig {
-  const issuer = exactHttpsUrl(config.issuer, 'issuer')
+  for (const field of ['issuer', 'clientId', 'publicOrigin'] as const) {
+    if (config[field] === undefined || config[field] === '')
+      throw new Error(
+        `dsh-oidc: ${field} is required (set it in the plugin config or the DSH_OIDC_* environment)`,
+      )
+  }
+  const issuerId = config.issuer as string
+  const clientId = config.clientId as string
+  const issuer = exactHttpsUrl(issuerId, 'issuer')
 
-  const publicOrigin = exactHttpsUrl(config.publicOrigin, 'publicOrigin')
+  const publicOrigin = exactHttpsUrl(config.publicOrigin as string, 'publicOrigin')
   if (publicOrigin.pathname !== '/')
     throw new Error('dsh-oidc: publicOrigin must be an origin with path /')
   const scopes = exactStrings(config.scopes ?? ['openid', 'profile', 'email'], 'scopes')
   if (!scopes.includes('openid')) throw new Error('dsh-oidc: scopes must include openid')
-  if (config.clientId.length === 0 || config.clientId.trim() !== config.clientId)
+  if (clientId.trim() !== clientId)
     throw new Error('dsh-oidc: clientId must be a non-empty exact string')
   if (config.allowedSubjects !== undefined && config.allowedSubjects.length === 0)
     throw new Error('dsh-oidc: allowedSubjects must not be explicitly empty')
@@ -245,8 +255,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
     throw new Error('dsh-oidc: session idle timeout must not exceed absolute lifetime')
   return {
     issuer,
-    issuerId: config.issuer,
-    clientId: config.clientId,
+    issuerId,
+    clientId,
     ...(config.clientSecretRef === undefined
       ? {}
       : { clientSecretRef: credentialRef(config.clientSecretRef) }),

@@ -280,6 +280,30 @@ export class OidcAdmission {
     plain(res, 401, 'unauthorized\n', req.method === 'HEAD')
   }
 
+  /**
+   * The signed-in profile the sidebar account button shows, plus the session's
+   * logout CSRF value. Served behind the proxy's forward_auth like every
+   * application path, and the session is checked here again, so the route
+   * answers nothing without a live OIDC session. It carries display claims
+   * only; tokens never leave the Host.
+   */
+  session(req: IncomingMessage, res: ServerResponse): void {
+    if (req.method !== 'GET') return methodNotAllowed(res, 'GET')
+    if (!this.trustedRequest(req)) return plain(res, 403, 'forbidden\n')
+    const site = header(req, 'sec-fetch-site')
+    if (site !== undefined && site !== 'same-origin') return plain(res, 403, 'forbidden\n')
+    const session = this.sessions.read(this.sessionValue(req))
+    if (session === undefined) return plain(res, 401, 'unauthorized\n')
+    const { principal } = session
+    const body: Record<string, string> = { csrf: session.csrf }
+    if (principal.displayName !== undefined) body.name = principal.displayName
+    if (principal.username !== undefined) body.username = principal.username
+    if (principal.email !== undefined) body.email = principal.email
+    if (principal.picture !== undefined) body.picture = principal.picture
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify(body))
+  }
+
   logoutConfirmation(req: IncomingMessage, res: ServerResponse): void {
     if (req.method !== 'GET') return methodNotAllowed(res, 'GET, POST')
     if (!this.trustedRequest(req)) return plain(res, 403, 'forbidden\n')

@@ -366,6 +366,115 @@ describe('OIDC route admission', () => {
     expect(messages.join('\n')).not.toMatch(/rotating-secret|code=|allowed|nonce|verifier/u)
   })
 
+  it('serves the signed-in profile and logout CSRF only to a live same-origin session', async () => {
+    const { admission, protocol } = harness()
+    protocol.claims = {
+      iss: 'https://id.example/issuer',
+      sub: 'allowed',
+      name: 'Synthetic Operator',
+      preferred_username: 'operator',
+      email: 'operator@example.test',
+      picture: 'https://id.example/avatar.png',
+    }
+    const started = await login(admission)
+    const callback = response()
+    await admission.callback(
+      request('GET', `/auth/callback?code=code&state=${started.state}`, { cookie: started.cookie }),
+      callback.value,
+    )
+    const session = cookieFrom(callback.captured.headers, SESSION_COOKIE)
+
+    const anonymous = response()
+    admission.session(request('GET', '/_dsh-oidc/session'), anonymous.value)
+    expect(anonymous.captured).toMatchObject({ status: 401, body: 'unauthorized\n' })
+
+    const stale = response()
+    harness().admission.session(
+      request('GET', '/_dsh-oidc/session', { cookie: session }),
+      stale.value,
+    )
+    expect(stale.captured.status).toBe(401)
+
+    const crossSite = response()
+    admission.session(
+      request('GET', '/_dsh-oidc/session', { cookie: session, 'sec-fetch-site': 'cross-site' }),
+      crossSite.value,
+    )
+    expect(crossSite.captured.status).toBe(403)
+
+    const badHost = response()
+    admission.session(
+      request('GET', '/_dsh-oidc/session', { cookie: session, host: 'evil.example' }),
+      badHost.value,
+    )
+    expect(badHost.captured.status).toBe(403)
+
+    const post = response()
+    admission.session(request('POST', '/_dsh-oidc/session', { cookie: session }), post.value)
+    expect(post.captured).toMatchObject({ status: 405, headers: { allow: 'GET' } })
+
+    const ok = response()
+    admission.session(
+      request('GET', '/_dsh-oidc/session', { cookie: session, 'sec-fetch-site': 'same-origin' }),
+      ok.value,
+    )
+    expect(ok.captured.status).toBe(200)
+    expect(ok.captured.headers?.['cache-control']).toBe('no-store')
+    const body = JSON.parse(String(ok.captured.body)) as Record<string, unknown>
+    expect(Object.keys(body).sort()).toEqual(['csrf', 'email', 'name', 'picture', 'username'])
+    expect(body).toMatchObject({
+      name: 'Synthetic Operator',
+      username: 'operator',
+      email: 'operator@example.test',
+      picture: 'https://id.example/avatar.png',
+    })
+    expect(String(body.csrf)).toMatch(/^[A-Za-z0-9_-]{43}$/u)
+    // No subject, issuer, groups, session bearer, or provider token reaches the browser.
+    const text = String(ok.captured.body)
+    expect(text).not.toMatch(/allowed|issuer|native-bootstrap|rotating-secret|nonce|verifier/u)
+    expect(text).not.toContain(session.split('=')[1])
+
+    // The CSRF value it hands out is the one logout accepts.
+    const logout = response()
+    await admission.logout(
+      request(
+        'POST',
+        '/auth/logout',
+        {
+          cookie: session,
+          origin: 'https://dsh.example',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        `csrf=${String(body.csrf)}`,
+      ),
+      logout.value,
+    )
+    expect(logout.captured.status).toBe(303)
+    const after = response()
+    admission.session(request('GET', '/_dsh-oidc/session', { cookie: session }), after.value)
+    expect(after.captured.status).toBe(401)
+  })
+
+  it('omits profile fields the provider did not send or sent unsafely', async () => {
+    const { admission, protocol } = harness()
+    protocol.claims = {
+      iss: 'https://id.example/issuer',
+      sub: 'allowed',
+      picture: 'javascript:alert(1)',
+      email: 42,
+    }
+    const started = await login(admission)
+    const callback = response()
+    await admission.callback(
+      request('GET', `/auth/callback?code=code&state=${started.state}`, { cookie: started.cookie }),
+      callback.value,
+    )
+    const session = cookieFrom(callback.captured.headers, SESSION_COOKIE)
+    const ok = response()
+    admission.session(request('GET', '/_dsh-oidc/session', { cookie: session }), ok.value)
+    expect(Object.keys(JSON.parse(String(ok.captured.body)) as object)).toEqual(['csrf'])
+  })
+
   it('fails closed for host, method, missing session, wrong state, provider failure, and policy denial', async () => {
     const { admission, protocol } = harness()
     const badHost = response()

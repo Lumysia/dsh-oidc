@@ -7,7 +7,33 @@ export interface Principal {
   readonly issuer: string
   readonly subject: string
   readonly displayName?: string
+  readonly email?: string
+  readonly username?: string
+  /** HTTPS profile picture URL from the `picture` claim. */
+  readonly picture?: string
   readonly groups: readonly string[]
+}
+
+const MAX_PROFILE_LENGTH = 256
+const MAX_PICTURE_LENGTH = 2048
+
+function profileText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_PROFILE_LENGTH
+    ? value
+    : undefined
+}
+
+/** Keep only an absolute HTTPS URL without credentials; anything else falls back to initials. */
+function pictureUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > MAX_PICTURE_LENGTH) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.username === '' && url.password === ''
+      ? url.href
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function exactArrayClaimValues(value: unknown): readonly string[] | undefined {
@@ -60,12 +86,17 @@ export function authorizeClaims(
     const actual = exactCustomClaimValues(claims[claim])
     if (actual === undefined || !actual.some((value) => allowed.has(value))) return undefined
   }
-  const display =
-    typeof claims.name === 'string' && claims.name.length <= 256 ? claims.name : undefined
+  const display = profileText(claims.name)
+  const email = profileText(claims.email)
+  const username = profileText(claims.preferred_username)
+  const picture = pictureUrl(claims.picture)
   return {
     issuer: expectedIssuer,
     subject: claims.sub,
     ...(display === undefined ? {} : { displayName: display }),
+    ...(email === undefined ? {} : { email }),
+    ...(username === undefined ? {} : { username }),
+    ...(picture === undefined ? {} : { picture }),
     groups,
   }
 }
