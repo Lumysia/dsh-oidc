@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { npmPack } from './npm-pack.mjs'
 import { join } from 'node:path'
 
 // Pin the exact distributable inventory, including the synthetic environment
@@ -23,7 +24,6 @@ const expectedFiles = [
   'docs/deployment.md',
   'docs/interoperability.md',
   'docs/threat-model.md',
-  'docs/upgrade-0.2.md',
   'examples/Caddyfile',
   'examples/cordis.patch.yml',
   'package.json',
@@ -32,11 +32,7 @@ const expectedFiles = [
 const temporary = mkdtempSync(join(tmpdir(), 'dsh-oidc-pack-'))
 chmodSync(temporary, 0o700)
 try {
-  const output = execFileSync('npm', ['pack', '--json', '--pack-destination', temporary], {
-    encoding: 'utf8',
-  })
-  const [result] = JSON.parse(output)
-  if (result === undefined) throw new Error('npm pack returned no result')
+  const result = npmPack(temporary)
   const actualFiles = result.files.map(({ path }) => path).sort()
   if (JSON.stringify(actualFiles) !== JSON.stringify([...expectedFiles].sort())) {
     throw new Error(

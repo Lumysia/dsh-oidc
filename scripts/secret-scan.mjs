@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { npmPack } from './npm-pack.mjs'
 import { join, relative } from 'node:path'
 
 const patterns = [
@@ -47,11 +48,7 @@ for (const path of regularFiles('dist')) scan(path, path)
 const temporary = mkdtempSync(join(tmpdir(), 'dsh-oidc-secret-scan-'))
 chmodSync(temporary, 0o700)
 try {
-  const output = execFileSync('npm', ['pack', '--json', '--pack-destination', temporary], {
-    encoding: 'utf8',
-  })
-  const [result] = JSON.parse(output)
-  if (result === undefined) throw new Error('npm pack returned no result')
+  const result = npmPack(temporary)
   const tarball = join(temporary, result.filename)
   const entries = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' })
     .trim()
