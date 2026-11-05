@@ -25,6 +25,7 @@ export interface Config {
   maxSessions?: number
   loginRateLimitPerMinute?: number
   trustedProxies?: string[]
+  directLogin?: boolean
 }
 
 /** Loopback only: a proxy on the same host. */
@@ -65,6 +66,7 @@ export const Config: z<Config> = z.object({
   maxSessions: z.natural().min(1).max(100_000).default(10_000),
   loginRateLimitPerMinute: z.natural().min(1).max(1_000).default(20),
   trustedProxies: z.array(String).default([...DEFAULT_TRUSTED_PROXIES]),
+  directLogin: z.boolean().default(false),
 })
 
 export interface AuthorizationPolicy {
@@ -97,6 +99,8 @@ export interface ResolvedConfig {
   readonly loginRateLimitPerMinute: number
   /** Socket peers whose client-address header is believed. */
   readonly trustedProxies: TrustedProxies
+  /** Send signed-out browser navigations straight to the provider instead of the bundled sign-in page. */
+  readonly directLogin: boolean
 }
 
 /** Matches socket peer addresses against the configured proxy addresses and CIDR ranges. */
@@ -269,5 +273,6 @@ export function resolveConfig(config: Config): ResolvedConfig {
     maxSessions: config.maxSessions ?? 10_000,
     loginRateLimitPerMinute: config.loginRateLimitPerMinute ?? 20,
     trustedProxies: trustedProxies(config.trustedProxies ?? DEFAULT_TRUSTED_PROXIES),
+    directLogin: config.directLogin ?? false,
   }
 }

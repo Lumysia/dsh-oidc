@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `directLogin`: signed-out browser navigations go straight to the provider instead of the bundled sign-in page. Off by default.
 - Fix: compare the ID token `iss` with the issuer exactly as configured. A bare-origin issuer such as `https://id.example` was normalized to `https://id.example/` and every login was denied.
 
 ## 0.3.0-alpha.0 - Unreleased
