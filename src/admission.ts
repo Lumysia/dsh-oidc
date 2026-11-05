@@ -85,6 +85,27 @@ function redirect(res: ServerResponse, location: string, cookies: readonly strin
   res.end()
 }
 
+function htmlAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function bootstrapPage(res: ServerResponse, location: string, cookies: readonly string[]): void {
+  const target = htmlAttribute(location)
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    'content-type': 'text/html; charset=utf-8',
+    'content-security-policy': "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    'set-cookie': [...cookies],
+  })
+  res.end(
+    `<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${target}"><title>Signing in</title><a href="${target}">Continue</a>`,
+  )
+}
+
 function formBody(req: IncomingMessage, maximum = 16_384): Promise<URLSearchParams | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -219,7 +240,11 @@ export class OidcAdmission {
       }
       const session = this.sessions.create(principal)
       if (session === undefined) return plain(res, 503, 'authentication unavailable\n')
-      redirect(res, this.connection.authenticatedUrl(this.config.publicOrigin.href), [
+      // The callback arrives on a navigation started by the provider's site, so
+      // a plain redirect keeps the whole chain cross-site and the browser never
+      // sends DSH's SameSite=Strict native cookie after the token exchange.
+      // A same-origin page that starts a fresh navigation makes it same-site.
+      bootstrapPage(res, this.connection.authenticatedUrl(this.config.publicOrigin.href), [
         secureCookie(SESSION_COOKIE, session.value, this.config.sessionMaxAgeSeconds),
         expiredCookie(TRANSACTION_COOKIE),
       ])
