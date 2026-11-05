@@ -1,3 +1,4 @@
+import { BlockList, isIP } from 'node:net'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 
@@ -23,7 +24,11 @@ export interface Config {
   maxTransactions?: number
   maxSessions?: number
   loginRateLimitPerMinute?: number
+  trustedProxies?: string[]
 }
+
+/** Loopback only: a proxy on the same host. */
+export const DEFAULT_TRUSTED_PROXIES: readonly string[] = ['127.0.0.0/8', '::1']
 
 export const Config: z<Config> = z.object({
   issuer: z.string().required(),
@@ -59,6 +64,7 @@ export const Config: z<Config> = z.object({
   maxTransactions: z.natural().min(1).max(10_000).default(1_000),
   maxSessions: z.natural().min(1).max(100_000).default(10_000),
   loginRateLimitPerMinute: z.natural().min(1).max(1_000).default(20),
+  trustedProxies: z.array(String).default([...DEFAULT_TRUSTED_PROXIES]),
 })
 
 export interface AuthorizationPolicy {
@@ -87,6 +93,62 @@ export interface ResolvedConfig {
   readonly maxTransactions: number
   readonly maxSessions: number
   readonly loginRateLimitPerMinute: number
+  /** Socket peers whose client-address header is believed. */
+  readonly trustedProxies: TrustedProxies
+}
+
+/** Matches socket peer addresses against the configured proxy addresses and CIDR ranges. */
+export interface TrustedProxies {
+  readonly entries: readonly string[]
+  has(address: string): boolean
+}
+
+/** Strip an IPv4-mapped IPv6 prefix so `::ffff:10.0.0.2` matches `10.0.0.0/8`. */
+function unmapped(address: string): string {
+  const lower = address.toLowerCase()
+  if (lower.startsWith('::ffff:') && isIP(lower.slice(7)) === 4) return lower.slice(7)
+  return address
+}
+
+/** Parse `address` or `address/prefix` entries; reject anything ambiguous or trust-everything. */
+export function trustedProxies(values: readonly string[]): TrustedProxies {
+  const entries = exactStrings(values, 'trustedProxies')
+  if (entries.length === 0) throw new Error('dsh-oidc: trustedProxies must not be explicitly empty')
+  const list = new BlockList()
+  for (const entry of entries) {
+    const [rawAddress = '', prefixText, extra] = entry.split('/')
+    const address = unmapped(rawAddress)
+    const family = isIP(address)
+    if (family === 0 || extra !== undefined)
+      throw new Error(
+        `dsh-oidc: trustedProxies entry ${JSON.stringify(entry)} is not an IP or CIDR`,
+      )
+    const type = family === 4 ? 'ipv4' : 'ipv6'
+    if (prefixText === undefined) {
+      list.addAddress(address, type)
+      continue
+    }
+    const max = family === 4 ? 32 : 128
+    if (!/^(?:0|[1-9]\d{0,2})$/u.test(prefixText) || Number(prefixText) > max)
+      throw new Error(
+        `dsh-oidc: trustedProxies entry ${JSON.stringify(entry)} has an invalid prefix`,
+      )
+    const prefix = Number(prefixText)
+    if (prefix === 0)
+      throw new Error(
+        `dsh-oidc: trustedProxies entry ${JSON.stringify(entry)} would trust every address`,
+      )
+    list.addSubnet(address, prefix, type)
+  }
+  return {
+    entries,
+    has(peer: string): boolean {
+      const address = unmapped(peer)
+      const family = isIP(address)
+      if (family === 0) return false
+      return list.check(address, family === 4 ? 'ipv4' : 'ipv6')
+    },
+  }
 }
 
 function exactHttpsUrl(value: string, field: string): URL {
@@ -202,5 +264,6 @@ export function resolveConfig(config: Config): ResolvedConfig {
     maxTransactions: config.maxTransactions ?? 1_000,
     maxSessions: config.maxSessions ?? 10_000,
     loginRateLimitPerMinute: config.loginRateLimitPerMinute ?? 20,
+    trustedProxies: trustedProxies(config.trustedProxies ?? DEFAULT_TRUSTED_PROXIES),
   }
 }

@@ -11,13 +11,14 @@ export { Config }
 export type { OidcConfig as ConfigType }
 export { authorizeClaims, type Principal } from './policy.js'
 export { resolveConfig } from './config.js'
-export const name = 'senti100-oidc'
+export { REQUIRED_SEAMS, RuntimeCompatibilityError } from './compatibility.js'
+export const name = 'lumysia-oidc'
 export const inject = ['webServer', 'connection', 'credentials']
 
 /** Register Host-only OIDC routes alongside the unchanged native Connection plugin. */
 export async function apply(ctx: Context, rawConfig: OidcConfig): Promise<void> {
   const config = resolveConfig(rawConfig)
-  await assertRuntimeCompatibility()
+  assertRuntimeCompatibility(ctx)
   const admission = new OidcAdmission(
     config,
     ctx.credentials,

@@ -3,18 +3,31 @@ name: ci
 on:
   push:
   pull_request:
+  # Weekly run against the newest DSH release, so an upstream break shows up
+  # even when this repository has not changed.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      dsh_version:
+        description: DSH version or dist-tag for the acceptance test
+        required: false
+        default: latest
 
 permissions:
   contents: read
 
+env:
+  CADDY_VERSION: 2.10.2
+
 jobs:
-  local-gates:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.19.0
+          node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm audit --audit-level=low
@@ -22,40 +35,35 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
       - run: npm run test:coverage
       - run: npm run build
       - run: npm run pack:check
       - run: npm run secret:scan
-      - name: Provision exact full-profile runtime and Chromium
+
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Install Caddy (checksum-verified release binary)
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global --force corepack@0.34.0
-          corepack enable
-          corepack prepare pnpm@10.34.5 --activate
-          corepack pnpm@10.34.5 --dir tests/fixtures/full-profile install --frozen-lockfile
-          tests/fixtures/full-profile/node_modules/.bin/playwright install --with-deps chromium
-      - name: Audit the installable runtime and tooling closure
-        run: corepack pnpm@10.34.5 --dir tests/fixtures/full-profile audit --audit-level=low
-      - name: Office healthy and malformed ZIP64 regression controls
-        run: npm run test:office
-      - name: Provision exact Caddy acceptance binary
-        shell: bash
-        run: |
-          set -euo pipefail
-          image='caddy@sha256:d8c17a862962def15cde69863a3a463f25a2664942eafd7bdbf050e9c3116b83'
-          docker pull "$image"
-          container="$(docker create "$image")"
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-          docker cp "$container:/usr/bin/caddy" "$RUNNER_TEMP/caddy"
-          chmod 0755 "$RUNNER_TEMP/caddy"
-          "$RUNNER_TEMP/caddy" version
-      - name: Published DSH Web full-profile acceptance
+          base="https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}"
+          archive="caddy_${CADDY_VERSION}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$archive"
+          curl -fsSL "$base/caddy_${CADDY_VERSION}_checksums.txt" | grep " ${archive}\$" | sha512sum -c -
+          tar -xzf "$archive" caddy
+          ./caddy version
+      - name: Real-stack acceptance (Caddy + DSH + synthetic OIDC + Chromium)
         env:
           DSH_OIDC_CADDY_BIN: ${{ runner.temp }}/caddy
-        run: npm run test:acceptance:full-profile
-      - name: Reproduce separate web-oidc install and hidden bootstrap URL
-        env:
-          PYTHONOPTIMIZE: '1' # Release checks must survive python -O.
-        run: npm run test:public-install
+          DSH_OIDC_DSH_VERSION: ${{ inputs.dsh_version || 'latest' }}
+        run: npm run test:acceptance

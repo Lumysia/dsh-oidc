@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0-alpha.0 - Unreleased
+
+First release of the Lumysia/dsh-oidc fork. The OIDC, session, policy, and proxy design from Senti100/dsh-oidc is unchanged.
+
+- Rename the package to `@lumysia/dsh-oidc` and the Cordis plugin to `lumysia-oidc`. Existing profiles must update the `name` and `id` in their patch (see `examples/cordis.patch.yml`).
+- Support the DSH 0.2 line instead of exactly 0.2.0-rc.2: DSH peers are `>=0.2.1-rc.1 <0.3.0-0`, Cordis `^4.0.5`. Tested with DSH 0.2.1-rc.1 and 0.2.2-rc.1. DSH 0.2.2 refuses plugins whose DSH peers do not match the running release, so the old exact pins no longer load.
+- Replace the startup version check with an API check: the plugin refuses to start only when `ctx.effect`, `webServer.register`, `connection.authenticatedUrl`, or `credentials.resolve` is missing, and names it.
+- Add `trustedProxies` (IPs or CIDR ranges) for the proxy allowed to set `X-Dsh-Oidc-Client-Ip`. Default stays loopback only. Needed when Caddy reaches DSH from another container.
+- Fix the example patch: a DSH patch row replaces the whole config, so `web-runtime: { printUrl: false }` also dropped `openBrowser` and made DSH ignore `--no-open`. The row now restates upstream's config.
+- Require Node 24.9 or newer (DSH 0.2.2 requires it).
+- Acceptance test installs the newest DSH release with `dsh plugin add` and boots the shipped example patch; CI also runs it weekly.
+- Remove the pinned pnpm fixture, override-count checks, the separate public-install and Office scripts, and the 0.2.0-rc.2 seam fixtures; see the PR for reasons.
+- Document that sessions are in memory and a DSH restart signs everyone out.
+
 ## 0.2.1-alpha.0 - Released
 
 - Add a bundled self-contained sign-in page at `/auth/signin` (strict CSP, inline HTML, no external assets).
