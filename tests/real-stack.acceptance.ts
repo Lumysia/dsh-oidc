@@ -968,6 +968,41 @@ describe(
         ])
         expect(JSON.stringify(profile.body)).not.toMatch(/synthetic-operator|synthetic-access|eyJ/u)
 
+        // The Plugins page lists the package as a bundle with its locale metadata.
+        const bundles = await page.evaluate(async () => {
+          const response = await fetch('/api/pluginManager/listBundles', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              type: 'client-request',
+              rpcId: 'acceptance-listBundles',
+              method: 'pluginManager/listBundles',
+              payload: { args: {} },
+            }),
+          })
+          return (await response.json()) as {
+            result: {
+              ok: boolean
+              value: Array<{
+                name: string
+                enabled: boolean
+                meta?: Record<string, { title?: string; description?: string }>
+                rows?: Array<{ rowId?: string; id?: string }>
+              }>
+            }
+          }
+        }, undefined)
+        expect(bundles.result.ok, JSON.stringify(bundles).slice(0, 2000)).toBe(true)
+        const bundle = bundles.result.value.find((entry) => entry.name === '@lumysia/dsh-oidc')
+        expect(
+          bundle,
+          JSON.stringify(bundles.result.value.map((entry) => entry.name)),
+        ).toBeDefined()
+        expect(bundle?.enabled).toBe(true)
+        expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect sign-in')
+        expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect 登录')
+        expect(JSON.stringify(bundle?.rows)).toContain('lumysia-oidc')
+
         const trigger = page.locator('[data-dsh-oidc-account] button[aria-haspopup="menu"]')
         await trigger.waitFor({ state: 'visible', timeout: 30_000 })
         expect(await trigger.textContent()).toContain('Synthetic Operator')
