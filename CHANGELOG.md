@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-alpha.2
 
 - Add `allowAnyUser` (`DSH_OIDC_ALLOW_ANY_USER`) for deployments that restrict access at the provider. Without it an empty policy still refuses to start.
 - Ship as a DSH bundle: the package's own `cordis.patch.yml` adds the `lumysia-oidc` row and turns off the startup bearer-URL print, `locale/en.json` and `locale/zh.json` give it a title and description, and `icon.svg` an icon. It shows on the Plugins page with a switch. Profiles must drop their hand-written row and `web-runtime` override (see the deployment guide).
