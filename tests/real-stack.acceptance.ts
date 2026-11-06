@@ -66,6 +66,7 @@ interface Locator {
   waitFor(options?: Record<string, unknown>): Promise<void>
   screenshot(options?: Record<string, unknown>): Promise<Buffer>
   first(): Locator
+  count(): Promise<number>
 }
 
 interface Page {
@@ -979,14 +980,41 @@ describe(
           ),
         ).toBe(1)
 
-        // DSH's one-time preview notice makes the page inert until it is dismissed.
-        const notice = page.getByRole('button', { name: 'Continue' })
-        try {
-          await notice.waitFor({ state: 'visible', timeout: 5_000 })
-          await notice.click()
-        } catch {
-          // Already dismissed in this DSH home.
+        // DSH's first-run dialogs (the preview notice, then the model onboarding)
+        // open at any point after load and make the page inert until dismissed.
+        const settleDeadline = Date.now() + 30_000
+        for (;;) {
+          const state = await page.evaluate(() => {
+            const button = document.querySelector('[data-dsh-oidc-account] button')
+            return {
+              dialog: document.querySelector('[role="dialog"],[aria-modal="true"]') !== null,
+              inert: button === null || button.closest('[inert]') !== null,
+            }
+          }, undefined)
+          if (!state.dialog && !state.inert) break
+          if (Date.now() > settleDeadline) {
+            const detail = await page.evaluate(
+              () => ({
+                dialogs: Array.from(
+                  document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
+                ).map((node) => (node as HTMLElement).outerHTML.slice(0, 600)),
+                inert: Array.from(document.querySelectorAll('[inert]')).map((node) =>
+                  (node as HTMLElement).outerHTML.slice(0, 200),
+                ),
+              }),
+              undefined,
+            )
+            throw new Error(`DSH dialogs did not settle: ${JSON.stringify({ state, detail })}`)
+          }
+          if (state.dialog) {
+            const dismiss = page.locator(
+              '[role="dialog"] button[aria-label="Close"], [role="dialog"] button:text-is("Continue")',
+            )
+            if ((await dismiss.count()) > 0) await dismiss.first().click()
+          }
+          await delay(250)
         }
+        await delay(1_000)
         await trigger.click()
         const menu = page.getByRole('menu')
         await menu.waitFor({ state: 'visible' })
