@@ -26,6 +26,7 @@ export interface Config {
   loginRateLimitPerMinute?: number
   trustedProxies?: string[]
   directLogin?: boolean
+  allowAnyUser?: boolean
 }
 
 /** Loopback only: a proxy on the same host. */
@@ -69,6 +70,7 @@ export const Config: z<Config> = z.object({
   loginRateLimitPerMinute: z.natural().min(1).max(1_000).default(20),
   trustedProxies: z.array(String).default([...DEFAULT_TRUSTED_PROXIES]),
   directLogin: z.boolean().default(false),
+  allowAnyUser: z.boolean().default(false),
 })
 
 export interface AuthorizationPolicy {
@@ -229,13 +231,15 @@ export function resolveConfig(config: Config): ResolvedConfig {
     throw new Error('dsh-oidc: allowedSubjects contains duplicates')
   const allowedEmails = exactStrings(config.allowedEmails, 'allowedEmails')
   const allowedGroups = exactStrings(config.allowedGroups, 'allowedGroups')
-  if (
-    allowedSubjects.length === 0 &&
-    allowedEmails.length === 0 &&
-    allowedGroups.length === 0 &&
-    Object.keys(config.requiredClaims ?? {}).length === 0
-  )
-    throw new Error('dsh-oidc: at least one allow policy is required')
+  const hasPolicy =
+    allowedSubjects.length > 0 ||
+    allowedEmails.length > 0 ||
+    allowedGroups.length > 0 ||
+    Object.keys(config.requiredClaims ?? {}).length > 0
+  // Leaving the policy out must be a deliberate choice: an accidentally empty
+  // config would otherwise admit every account the provider will sign in.
+  if (!hasPolicy && config.allowAnyUser !== true)
+    throw new Error('dsh-oidc: at least one allow policy is required, or set allowAnyUser')
   const groupsClaim = config.groupsClaim ?? 'groups'
   if (groupsClaim.length === 0 || groupsClaim.trim() !== groupsClaim)
     throw new Error('dsh-oidc: groupsClaim must be a non-empty exact string')
