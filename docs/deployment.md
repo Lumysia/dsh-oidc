@@ -1,6 +1,6 @@
 # Install and operate DSH OIDC (DSH Web 0.2.x)
 
-This guide installs the plugin from a tarball built from a checkout of this repository; `@lumysia/dsh-oidc` is not published to npm. Try it in a disposable DSH home first, then back up any real home and proxy configuration before repeating it. Do not copy provider exports, session cookies, client secrets, or real subject IDs into a Git checkout or support ticket.
+This guide installs the plugin as a DSH bundle, either from a GitHub release tarball or from a tarball built from a checkout of this repository; `@lumysia/dsh-oidc` is not published to npm. Try it in a disposable DSH home first, then back up any real home and proxy configuration before repeating it. Do not copy provider exports, session cookies, client secrets, or real subject IDs into a Git checkout or support ticket.
 
 ## Prerequisites and topology
 
@@ -15,29 +15,30 @@ With Caddy and DSH on one host, bind DSH to `127.0.0.1` and keep the default `tr
 
 When Caddy runs in another container, DSH has to listen on its container address (DSH rejects wildcard binds such as `0.0.0.0`; pass the concrete address, for example from `hostname -i`). Put the two containers on a private network that nothing else joins, publish no DSH port to the host, and set `trustedProxies` to Caddy's address or that network, for example `DSH_OIDC_TRUSTED_PROXIES='["172.18.0.0/16"]'`. Without it `/auth/login` answers 403, because the client-address header from a non-trusted peer is ignored. Point the Caddyfile's `127.0.0.1:3080` upstreams at the DSH container name and port.
 
-## Build and install into a profile
+## Install into a profile
 
-Run from this checkout. The commands create a separate `web-oidc` profile and do **not** alter an existing `web` profile:
+The package is a DSH bundle: its own `cordis.patch.yml` adds the `lumysia-oidc` row (and turns off the startup bearer-URL print), so the profile needs no row of its own. Installing it enables the bundle, which records it in the profile's `package.json` under `dsh.profile.bundles`. It then shows on the sidebar **Plugins** page with its title, description and switch, and its row appears under **Settings → Built-in plugins**.
+
+From a release (pin the version you reviewed):
 
 ```sh
 export DSH_HOME=/path/to/isolated-dsh-home
+dsh --profile web-oidc --from-default-profile web --dump-config >/dev/null
+dsh plugin --profile web-oidc add https://github.com/Lumysia/dsh-oidc/releases/download/v<version>/lumysia-dsh-oidc-<version>.tgz
+```
+
+Or from a checkout:
+
+```sh
 npm ci
 npm run check
 TARBALL="$PWD/$(npm pack --silent | tail -n 1)"
-# Initialize the profile from the shipped Web template without opening a listener.
-dsh --profile web-oidc --from-default-profile web --dump-config >/dev/null
 dsh plugin --profile web-oidc add "file:$TARBALL"
 ```
 
-DSH checks the plugin's DSH peer range against the running release during `plugin add` and refuses an incompatible pair. Keep the tarball; the profile refers to it by path. Then install the example patch into the fresh profile, refusing to overwrite one that is already customized:
+DSH checks the plugin's DSH peer range against the running release during `plugin add` and refuses an incompatible pair. A `file:` install refers to the tarball by path, so keep it. pnpm caches a tarball by version: reinstalling the same version keeps the old files, so bump the version for every rebuild.
 
-```sh
-patch="$DSH_HOME/profiles/web-oidc/cordis.patch.yml"
-if grep -vE '^\s*(#|$)' "$patch" | grep -qvx '\[\]'; then echo 'profile patch is not empty' >&2; exit 1; fi
-install -m 600 examples/cordis.patch.yml "$patch"
-```
-
-**Upgrading from `@senti100/dsh-oidc`:** the package and the Cordis plugin id changed (`senti100-oidc` to `lumysia-oidc`). Remove the old package from the profile, add the new tarball, and update the `id` and `name` in the profile's patch to match `examples/cordis.patch.yml`. Also replace a `web-runtime` row that only sets `printUrl: false` with the full row from the example; the short form drops upstream's `openBrowser` setting, so DSH ignores `--no-open`. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
+**Upgrading from a hand-written profile row** (0.3.0-alpha.0 and earlier, or `@senti100/dsh-oidc`): back up the profile's `cordis.patch.yml`, move the row's values into the `DSH_OIDC_*` environment, then delete the `lumysia-oidc` (or `senti100-oidc`) insert and the `web-runtime` row from the profile patch; the bundle supplies both. DSH enables a bundle only when its package is newly added, so after upgrading a package the profile already depended on, add `@lumysia/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json` yourself (or switch it on in **Plugins**) before restarting. Until then no row is loaded, `/auth/check` is missing and the proxy denies everything. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
 
 ## Configure the OIDC provider and credentials
 
@@ -55,14 +56,14 @@ ExecStart=/usr/local/bin/dsh --profile web-oidc --no-open --host 127.0.0.1 --por
 
 Systemd reads `EnvironmentFile` into the **inherited process environment**; this is different from DSH reading a `.env` layer. In a container, inject the same keys as process environment from a restricted secret source. Process environment can be inspected by sufficiently privileged local principals; use a dedicated service user. The issuer in each tuple must exactly match discovery, and the provider callback must exactly match `publicOrigin + /auth/callback`. A managed DSH credential record may supply the secret instead of the process variable if it is provisioned **before** the first login. Never print resolved config or credential values to logs.
 
-Start DSH with that environment, for example `dsh --profile web-oidc --no-open --host 127.0.0.1 --port 3080 --trusted-host dsh.example`. The example patch sets **`web-runtime.config.printUrl: false`**; `--no-open` alone only stops DSH opening a browser. Confirm that a disposable startup writes no `/?token=` bearer URL to service logs **before** exposing the proxy.
+Start DSH with that environment, for example `dsh --profile web-oidc --no-open --host 127.0.0.1 --port 3080 --trusted-host dsh.example`. The bundle's patch sets **`web-runtime.config.printUrl: false`**; `--no-open` alone only stops DSH opening a browser. Confirm that a disposable startup writes no `/?token=` bearer URL to service logs **before** exposing the proxy.
 
 ## Proxy and browser checks
 
 Adapt and validate [`examples/Caddyfile`](../examples/Caddyfile) against your Caddy binary and certificate/network layout. Replace `dsh.example`, the upstream address, and the TLS provisioner. Its `auto_https disable_redirects` is a **process-global** choice; when joining an existing multi-site Caddyfile, reconcile the existing global block and other sites' redirect policies instead of pasting it wholesale. HSTS in this template applies only to the named host; enable `includeSubDomains` only after verifying you control and serve every relevant subdomain. The example:
 
 - passes only five **exact** `/auth` routes to the plugin and rejects unmatched `/auth/*` routes;
-- strips client-supplied identity and address headers, then gates every other path with `/auth/check`;
+- strips client-supplied identity and address headers, then gates every other path with `/auth/check`, including the sidebar's `/_dsh-oidc/session` profile read, which the plugin checks again itself;
 - removes `Connection`/`Upgrade` only on the auth pre-check (the application proxy still upgrades WebSockets);
 - makes newly issued `dsh-auth-*` cookies `Secure`, including deletion and already-Secure cases, and redacts URL queries from access logs.
 
@@ -72,4 +73,4 @@ Keep a backup of the prior proxy configuration. Do not turn on public routing un
 
 Preserve the original DSH profile/home and proxy configuration. On failure, restore the previous proxy and application pair together, verify its health, and leave the new profile disabled; do not delete the shared home or rotate the native signing key as a casual rollback. A restart of DSH invalidates the plugin's in-memory OIDC sessions. Provider-side policy revocation is not immediate for an existing local session; it takes effect at idle/absolute expiry or restart. Logout removes the outer session, not necessarily the native cookie, so the proxy gate remains mandatory. An HTTP redirect, HSTS, or a `Secure` rewrite cannot retroactively prevent an already-stored non-`Secure` cookie from being sent on a first HTTP request.
 
-`npm run test:acceptance` (see the README) exercises a synthetic provider and the newest DSH Web release with the shipped Caddyfile and patch, and CI runs it. It does not certify your provider, your firewall, your container network, or a browser session in your environment.
+`npm run test:acceptance` (see the README) exercises a synthetic provider and the newest DSH Web release with the shipped Caddyfile and bundle, and CI runs it. It does not certify your provider, your firewall, your container network, or a browser session in your environment.

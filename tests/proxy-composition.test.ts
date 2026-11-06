@@ -2,25 +2,32 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const caddy = readFileSync(new URL('../examples/Caddyfile', import.meta.url), 'utf8')
-const patch = readFileSync(new URL('../examples/cordis.patch.yml', import.meta.url), 'utf8')
+const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+  dsh: { bundle: { patch: string }; client: { platform: string } }
+  exports: Record<string, unknown>
+}
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 
 describe('proxy and composition security examples', () => {
-  it('preserves native Connection and adds a Host-only plugin', () => {
+  it('ships a bundle layer that adds only the Host plugin row, without site values', () => {
+    expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
+    expect(manifest.exports['./cordis.patch.yml']).toBe('./cordis.patch.yml')
+    expect(manifest.exports['./client']).toEqual({ default: './dist/client.js' })
+    expect(manifest.dsh.client.platform).toBe('web')
     expect(patch).toContain("name: '@lumysia/dsh-oidc'")
     expect(patch).toContain('- id: lumysia-oidc')
-    expect(patch).toContain('Connection is still owned by `@deepseek-ai/dsh-client-connection`')
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-connection'")
     expect(patch).toContain('inject: [webServer, connection, credentials]')
-    expect(patch).toContain('clientSecretRef:')
+    // Site values come from DSH_OIDC_* in the environment, never the shipped layer.
+    const row = patch.slice(patch.indexOf('- id: lumysia-oidc'))
+    expect(row).not.toMatch(/^\s+(?:config|issuer|clientId|publicOrigin|allowedSubjects):/mu)
     expect(patch).not.toMatch(/clientSecret:\s/u)
-    expect(patch).toContain('--trusted-host dsh.example')
     // A patch row replaces the whole config: keep upstream's other values so --no-open still works.
     expect(patch).toContain(
       '- id: web-runtime\n  config:\n    openBrowser: !!js ctx.webStartup.openBrowser\n    printUrl: false\n',
     )
-    expect(patch).toContain('trustedProxies:')
-    expect(patch).toContain('--no-open\n# does NOT suppress it')
+    expect(patch).toContain('fail closed')
   })
 
   it('routes only exact auth endpoints and gates every other path before one reverse proxy', () => {

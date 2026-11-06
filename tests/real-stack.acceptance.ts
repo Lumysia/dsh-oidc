@@ -58,14 +58,33 @@ interface Cookie {
   readonly sameSite: 'Strict' | 'Lax' | 'None'
 }
 
+interface Locator {
+  getAttribute(name: string): Promise<string | null>
+  inputValue(): Promise<string>
+  click(options?: Record<string, unknown>): Promise<void>
+  textContent(): Promise<string | null>
+  waitFor(options?: Record<string, unknown>): Promise<void>
+  screenshot(options?: Record<string, unknown>): Promise<Buffer>
+  first(): Locator
+  count(): Promise<number>
+}
+
 interface Page {
   goto(url: string, options?: Record<string, unknown>): Promise<{ status(): number } | null>
   title(): Promise<string>
   url(): string
-  locator(selector: string): {
-    getAttribute(name: string): Promise<string | null>
-    inputValue(): Promise<string>
-  }
+  locator(selector: string): Locator
+  getByRole(role: string, options?: Record<string, unknown>): Locator
+  emulateMedia(options: Record<string, unknown>): Promise<void>
+  waitForFunction<A>(
+    callback: (argument: A) => unknown,
+    argument: A,
+    options?: Record<string, unknown>,
+  ): Promise<unknown>
+  setViewportSize(size: { width: number; height: number }): Promise<void>
+  screenshot(options?: Record<string, unknown>): Promise<Buffer>
+  keyboard: { press(key: string): Promise<void> }
+  mouse: { click(x: number, y: number): Promise<void> }
   waitForNavigation(options?: Record<string, unknown>): Promise<{ status(): number } | null>
   waitForURL(url: string, options?: Record<string, unknown>): Promise<void>
   waitForResponse(
@@ -84,6 +103,9 @@ const controlledFailure = process.env.DSH_OIDC_CONTROLLED_SETUP_FAILURE === '1'
 const stackRoot = join(runRoot, controlledFailure ? 'failure-stack' : 'stack')
 const profilePatch = join(dshHome, 'profiles/web/cordis.patch.yml')
 const credentialReference = 'DSH_OIDC_TEST_CLIENT_SECRET'
+const screenshotDirectory = process.env.DSH_OIDC_SCREENSHOT_DIR
+const AVATAR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#4f7cd8"/><circle cx="32" cy="25" r="11" fill="#fff"/><path d="M12 58c3-12 11-18 20-18s17 6 20 18z" fill="#fff"/></svg>'
 
 let provider: Server | undefined
 let caddy: ChildProcess | undefined
@@ -251,10 +273,10 @@ function caddyEnvironment(): NodeJS.ProcessEnv {
   }
 }
 
-// Boot with the shipped example patch, so the documented install is what gets tested.
+// The bundle's own patch supplies the row and the environment supplies every
+// site value, so the profile patch holds nothing of this plugin.
 function writeProfilePatch(): void {
-  const shipped = readFileSync(new URL('../examples/cordis.patch.yml', import.meta.url), 'utf8')
-  writeFileSync(profilePatch, shipped, { mode: 0o600 })
+  writeFileSync(profilePatch, '[]\n', { mode: 0o600 })
 }
 
 function oidcEnvironment(): NodeJS.ProcessEnv {
@@ -264,6 +286,8 @@ function oidcEnvironment(): NodeJS.ProcessEnv {
     DSH_OIDC_CLIENT_SECRET_REF: credentialReference,
     DSH_OIDC_PUBLIC_ORIGIN: `${publicOrigin}/`,
     DSH_OIDC_ALLOWED_SUBJECTS: JSON.stringify([{ issuer, subject: 'synthetic-operator' }]),
+    // Caddy reaches DSH over loopback in this stack.
+    DSH_OIDC_TRUSTED_PROXIES: JSON.stringify(['127.0.0.0/8']),
   }
 }
 
@@ -303,6 +327,11 @@ async function startProvider(): Promise<void> {
             token_endpoint_auth_methods_supported: ['client_secret_post'],
           }),
         )
+        return
+      }
+      if (url.pathname === '/avatar.svg') {
+        response.writeHead(200, { 'content-type': 'image/svg+xml' })
+        response.end(AVATAR_SVG)
         return
       }
       if (url.pathname === '/jwks') {
@@ -354,6 +383,10 @@ async function startProvider(): Promise<void> {
         const idToken = await new SignJWT({
           iss: issuer,
           sub: providerSubject,
+          name: 'Synthetic Operator',
+          preferred_username: 'synthetic',
+          email: 'operator@example.test',
+          picture: new URL('avatar.svg', issuer).href,
           aud: 'synthetic-client',
           nonce: grant.nonce,
           iat: now,
@@ -655,9 +688,15 @@ describe(
   `published DSH ${process.env.DSH_OIDC_DSH_VERSION ?? ''} Web profile`,
   { concurrent: false },
   () => {
-    it('starts from the shipped patch without printing or opening the bearer URL', () => {
+    it('starts as an enabled bundle without printing or opening the bearer URL', () => {
+      const profile = JSON.parse(
+        readFileSync(join(dshHome, 'profiles/web/package.json'), 'utf8'),
+      ) as { dsh?: { profile?: { bundles?: string[] } } }
+      expect(profile.dsh?.profile?.bundles).toContain('@lumysia/dsh-oidc')
+      expect(readFileSync(profilePatch, 'utf8')).not.toContain('lumysia')
       expect(dshOutput).not.toContain('?token=')
       expect(dshOutput).not.toContain('opening the default browser')
+      expect(dshOutput).not.toContain('synthetic-operator')
     })
 
     it('denies every application owner before outer login', async () => {
@@ -668,6 +707,7 @@ describe(
         '/api/__acceptance_missing__',
         '/events',
         '/api/remote.mux',
+        '/_dsh-oidc/session',
       ]) {
         // Browser navigations are redirected to the bundled sign-in page; the
         // plain 401 contract is covered by the API-client assertions below.
@@ -690,6 +730,8 @@ describe(
         ],
       )
       expect(upload.status).toBe(401)
+      // The profile endpoint sits behind forward_auth like the application.
+      expect((await curl('dsh.test', `${publicOrigin}/_dsh-oidc/session`)).status).toBe(401)
       const opened = await page.evaluate(
         (url) =>
           new Promise<boolean>((resolve) => {
@@ -899,10 +941,180 @@ describe(
       }
     })
 
-    it('live-unloads the packed plugin and exposes the real frontend fallback 404', async () => {
+    it(
+      'shows the OIDC account button with Settings and sign-out in the sidebar',
+      { timeout: 90_000 },
+      async () => {
+        if (page === undefined || context === undefined) throw new Error('browser context absent')
+        await page.setViewportSize({ width: 1280, height: 800 })
+        await page.goto(`${publicOrigin}/auth/login`)
+        await page.waitForURL(`${publicOrigin}/`, { waitUntil: 'domcontentloaded' })
+        await page.reload({ waitUntil: 'load' })
+
+        const profile = await page.evaluate(async () => {
+          const response = await fetch('/_dsh-oidc/session')
+          return {
+            status: response.status,
+            body: (await response.json()) as Record<string, string>,
+          }
+        }, undefined)
+        expect(profile.status).toBe(200)
+        expect(Object.keys(profile.body).sort()).toEqual([
+          'csrf',
+          'email',
+          'name',
+          'picture',
+          'username',
+        ])
+        expect(JSON.stringify(profile.body)).not.toMatch(/synthetic-operator|synthetic-access|eyJ/u)
+
+        // The Plugins page lists the package as a bundle with its locale metadata.
+        const bundles = await page.evaluate(async () => {
+          const response = await fetch('/api/pluginManager/listBundles', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              type: 'client-request',
+              rpcId: 'acceptance-listBundles',
+              method: 'pluginManager/listBundles',
+              payload: { args: {} },
+            }),
+          })
+          return (await response.json()) as {
+            result: {
+              ok: boolean
+              value: Array<{
+                name: string
+                enabled: boolean
+                meta?: Record<string, { title?: string; description?: string }>
+                rows?: Array<{ rowId?: string; id?: string }>
+              }>
+            }
+          }
+        }, undefined)
+        expect(bundles.result.ok, JSON.stringify(bundles).slice(0, 2000)).toBe(true)
+        const bundle = bundles.result.value.find((entry) => entry.name === '@lumysia/dsh-oidc')
+        expect(
+          bundle,
+          JSON.stringify(bundles.result.value.map((entry) => entry.name)),
+        ).toBeDefined()
+        expect(bundle?.enabled).toBe(true)
+        expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect sign-in')
+        expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect 登录')
+        expect(JSON.stringify(bundle?.rows)).toContain('lumysia-oidc')
+
+        const trigger = page.locator('[data-dsh-oidc-account] button[aria-haspopup="menu"]')
+        await trigger.waitFor({ state: 'visible', timeout: 30_000 })
+        expect(await trigger.textContent()).toContain('Synthetic Operator')
+        await page.locator('[data-dsh-oidc-account] img').waitFor({ state: 'visible' })
+        // DSH's own DeepSeek launcher is shadowed, not shown beside it.
+        expect(
+          await page.evaluate(
+            () => document.querySelectorAll('[data-dsh-oidc-account]').length,
+            undefined,
+          ),
+        ).toBe(1)
+
+        // DSH's first-run dialogs (the preview notice, then the model onboarding)
+        // open at any point after load and make the page inert until dismissed.
+        const settleDeadline = Date.now() + 30_000
+        for (;;) {
+          const state = await page.evaluate(() => {
+            const button = document.querySelector('[data-dsh-oidc-account] button')
+            return {
+              dialog: document.querySelector('[role="dialog"],[aria-modal="true"]') !== null,
+              inert: button === null || button.closest('[inert]') !== null,
+            }
+          }, undefined)
+          if (!state.dialog && !state.inert) break
+          if (Date.now() > settleDeadline) {
+            const detail = await page.evaluate(
+              () => ({
+                dialogs: Array.from(
+                  document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
+                ).map((node) => (node as HTMLElement).outerHTML.slice(0, 600)),
+                inert: Array.from(document.querySelectorAll('[inert]')).map((node) =>
+                  (node as HTMLElement).outerHTML.slice(0, 200),
+                ),
+              }),
+              undefined,
+            )
+            throw new Error(`DSH dialogs did not settle: ${JSON.stringify({ state, detail })}`)
+          }
+          if (state.dialog) {
+            const dismiss = page.locator(
+              '[role="dialog"] button[aria-label="Close"], [role="dialog"] button:text-is("Continue")',
+            )
+            if ((await dismiss.count()) > 0) await dismiss.first().click()
+          }
+          await delay(250)
+        }
+        await delay(1_000)
+        await trigger.click()
+        const menu = page.getByRole('menu')
+        await menu.waitFor({ state: 'visible' })
+        expect(await menu.textContent()).toContain('Settings')
+        expect(await menu.textContent()).toContain('Sign out')
+        // An open menu masks the page, as DSH's own menus do; a click outside closes it.
+        const view = page
+        const toggleMenu = async (state: 'visible' | 'hidden') => {
+          if (state === 'hidden') await view.mouse.click(900, 300)
+          else await trigger.click()
+          await menu.waitFor({ state })
+        }
+        if (screenshotDirectory !== undefined) {
+          mkdirSync(screenshotDirectory, { recursive: true })
+          await page.screenshot({ path: join(screenshotDirectory, 'sidebar-menu-light.png') })
+          await toggleMenu('hidden')
+          await page.emulateMedia({ colorScheme: 'dark' })
+          await page
+            .waitForFunction(
+              () =>
+                getComputedStyle(document.body).backgroundColor !== 'rgb(255, 255, 255)' ||
+                document.documentElement.dataset.theme === 'dark',
+              undefined,
+              { timeout: 5_000 },
+            )
+            .catch(() => undefined)
+          await toggleMenu('visible')
+          await page.screenshot({ path: join(screenshotDirectory, 'sidebar-menu-dark.png') })
+          await toggleMenu('hidden')
+          await page.emulateMedia({ colorScheme: 'light' })
+          await toggleMenu('visible')
+        }
+
+        // Settings stays reachable from the seat this button took over.
+        await page.getByRole('menuitem', { name: 'Settings' }).click()
+        await page.getByRole('dialog').first().waitFor({ state: 'visible' })
+        await page.keyboard.press('Escape')
+
+        await trigger.click()
+        await menu.waitFor({ state: 'visible' })
+        const loggedOut = page.waitForResponse((response) =>
+          response.url().startsWith(`${publicOrigin}/auth/logout`),
+        )
+        await page.getByRole('menuitem', { name: 'Sign out' }).click()
+        expect((await loggedOut).status()).toBe(303)
+        await page.waitForURL(`${publicOrigin}/auth/signin`, { waitUntil: 'domcontentloaded' })
+        const cookies = await context.cookies(publicOrigin)
+        const outer = cookies.find((cookie) => cookie.name === '__Host-dsh-oidc-session')
+        expect(outer?.value ?? '').toBe('')
+        expect(
+          (
+            await curl('dsh.test', `${publicOrigin}/_dsh-oidc/session`, [
+              '--cookie',
+              cookies.map((c) => `${c.name}=${c.value}`).join('; '),
+            ])
+          ).status,
+        ).toBe(401)
+      },
+    )
+
+    it('fails closed through the proxy when the bundle row is switched off', async () => {
       expect((await directDsh('/auth/check', nativeCookieHeader)).status).toBe(401)
+      // The Plugins page's row toggle writes exactly this override.
       const replacement = `${profilePatch}.next`
-      writeFileSync(replacement, '[]\n', { mode: 0o600 })
+      writeFileSync(replacement, '- id: lumysia-oidc\n  disabled: true\n', { mode: 0o600 })
       renameSync(replacement, profilePatch)
       const deadline = Date.now() + 15_000
       let status = 401
@@ -916,6 +1128,16 @@ describe(
         await delay(50)
       }
       expect(status, body).toBe(404)
+      // forward_auth treats the missing check route as a denial: nothing reaches the app,
+      // not even with the stale native cookie.
+      for (const path of ['/', '/api/__acceptance_missing__', realAssetPath]) {
+        const proxied = await curl('dsh.test', publicOrigin + path, [
+          '--cookie',
+          nativeCookieHeader,
+        ])
+        expect(proxied.status, path).toBe(404)
+        expect(proxied.body, path).not.toContain('<html')
+      }
     })
 
     it('binds the real DSH listener only to loopback', async () => {

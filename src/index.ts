@@ -5,19 +5,33 @@ import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { OidcAdmission } from './admission.js'
 import { assertRuntimeCompatibility } from './compatibility.js'
 import { Config, resolveConfig, type Config as OidcConfig } from './config.js'
+import { applyEnvironment, readEnvironment } from './env.js'
 import { OpenIdClientProtocol } from './oidc.js'
 
 export { Config }
 export type { OidcConfig as ConfigType }
 export { authorizeClaims, type Principal } from './policy.js'
 export { resolveConfig } from './config.js'
+export { ENVIRONMENT_FIELDS, applyEnvironment, readEnvironment } from './env.js'
 export { REQUIRED_SEAMS, RuntimeCompatibilityError } from './compatibility.js'
 export const name = 'lumysia-oidc'
 export const inject = ['webServer', 'connection', 'credentials']
 
-/** Register Host-only OIDC routes alongside the unchanged native Connection plugin. */
-export async function apply(ctx: Context, rawConfig: OidcConfig): Promise<void> {
-  const config = resolveConfig(rawConfig)
+/** Same-origin profile read for the sidebar account button; guarded by the proxy like the app. */
+export const SESSION_PATH = '/_dsh-oidc/session'
+
+/**
+ * Register Host-only OIDC routes alongside the unchanged native Connection plugin.
+ * DSH_OIDC_* environment values win over the row config field by field; an
+ * incomplete or invalid result throws, so no route registers and the proxy's
+ * `/auth/check` subrequest fails closed.
+ */
+export async function apply(ctx: Context, rawConfig: OidcConfig | undefined): Promise<void> {
+  const rowConfig = rawConfig ?? {}
+  const environment = readEnvironment(process.env, rowConfig)
+  const config = resolveConfig(applyEnvironment(rowConfig, environment))
+  if (environment.fields.length > 0)
+    ctx.logger.info(`dsh-oidc: from environment: ${environment.fields.join(', ')}`)
   assertRuntimeCompatibility(ctx)
   const admission = new OidcAdmission(
     config,
@@ -35,6 +49,7 @@ export async function apply(ctx: Context, rawConfig: OidcConfig): Promise<void> 
       path: '/auth/signin',
       handler: (req, res) => admission.signin(req, res),
     },
+    { kind: 'exact', path: SESSION_PATH, handler: (req, res) => admission.session(req, res) },
     {
       kind: 'exact',
       path: '/auth/logout',

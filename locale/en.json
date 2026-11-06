@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OpenID Connect sign-in",
+    "description": "Requires an OpenID Connect sign-in before DSH Web opens, and adds an account button with sign-out to the sidebar."
+  }
+}

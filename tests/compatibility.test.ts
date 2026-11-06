@@ -66,7 +66,6 @@ describe('DSH host seam check', () => {
       expect(manifest.peerDependencies[peer]).toBe(manifest.engines.dsh)
     }
     expect(manifest.engines.dsh).toMatch(/^>=0\.2\.1-rc\.1 <0\.3\.0-0$/u)
-    expect(manifest.exports).not.toHaveProperty('./client')
   })
 
   it('accepts a host that provides every seam', () => {
@@ -139,10 +138,42 @@ describe('DSH host seam check', () => {
       { kind: 'exact', path: '/auth/callback' },
       { kind: 'exact', path: '/auth/check' },
       { kind: 'exact', path: '/auth/signin' },
+      { kind: 'exact', path: '/_dsh-oidc/session' },
       { kind: 'exact', path: '/auth/logout' },
     ])
-    expect(effects).toHaveLength(5)
+    expect(effects).toHaveLength(6)
     for (const dispose of effects) dispose()
     expect(routes).toEqual([])
+  })
+
+  it('takes a bare bundle row from the environment and registers nothing when it is incomplete', async () => {
+    const saved = { ...process.env }
+    const routes: unknown[] = []
+    const info: string[] = []
+    const ctx = host({
+      logger: { info: (message: string) => info.push(message) },
+      webServer: { register: (route: unknown) => routes.push(route) },
+      effect: (factory: () => unknown) => factory(),
+    }) as unknown as Context
+    try {
+      for (const key of Object.keys(process.env))
+        if (key.startsWith('DSH_OIDC_')) Reflect.deleteProperty(process.env, key)
+      await expect(apply(ctx, undefined)).rejects.toThrow(/issuer is required/u)
+      expect(routes).toEqual([])
+      Object.assign(process.env, {
+        DSH_OIDC_ISSUER: 'https://id.example',
+        DSH_OIDC_CLIENT_ID: 'client',
+        DSH_OIDC_PUBLIC_ORIGIN: 'https://dsh.example/',
+        DSH_OIDC_ALLOWED_SUBJECTS: '["operator"]',
+      })
+      await apply(ctx, undefined)
+      expect(routes).toHaveLength(6)
+      expect(info.join('\n')).toContain('issuer, clientId, publicOrigin, allowedSubjects')
+      expect(info.join('\n')).not.toContain('operator')
+    } finally {
+      for (const key of Object.keys(process.env))
+        if (key.startsWith('DSH_OIDC_')) Reflect.deleteProperty(process.env, key)
+      Object.assign(process.env, saved)
+    }
   })
 })
