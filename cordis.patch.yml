@@ -1,0 +1,22 @@
+# @lumysia/dsh-oidc bundle layer. Turning the bundle on adds the OIDC row;
+# turning it off removes it, which also removes /auth/check, so a proxy that
+# guards DSH with forward_auth /auth/check denies every request (fail closed).
+#
+# The row carries no site values: the plugin reads DSH_OIDC_ISSUER,
+# DSH_OIDC_CLIENT_ID, DSH_OIDC_PUBLIC_ORIGIN, DSH_OIDC_ALLOWED_SUBJECTS,
+# DSH_OIDC_TRUSTED_PROXIES, DSH_OIDC_DIRECT_LOGIN and the others listed in the
+# README from DSH's environment. Without the required ones it refuses to start.
+#
+# DSH Web prints a bearer bootstrap URL at startup by default; behind the proxy
+# that URL must not reach logs. A patch row replaces the row's whole config, so
+# web-runtime restates upstream's values and only flips printUrl.
+- id: web-runtime
+  config:
+    openBrowser: !!js ctx.webStartup.openBrowser
+    printUrl: false
+    publicUrl: !!js ctx.webStartup.publicUrl
+    surfaceContext: true
+- insert:
+    - id: lumysia-oidc
+      name: '@lumysia/dsh-oidc'
+      inject: [webServer, connection, credentials]

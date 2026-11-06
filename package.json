@@ -1,6 +1,6 @@
 {
   "name": "@lumysia/dsh-oidc",
-  "version": "0.3.0-alpha.0",
+  "version": "0.3.0-alpha.1",
   "description": "Provider-neutral OpenID Connect admission for DeepSeek Harness Web",
   "type": "module",
   "license": "MIT",
@@ -19,10 +19,30 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./client": {
+      "default": "./dist/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
   },
   "files": [
     "dist",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
     "README.md",
     "SECURITY.md",
     "LICENSE",
@@ -57,16 +77,22 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-store": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.2-rc.1",
     "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
     "@deepseek-ai/dsh-host-webserver": "0.2.2-rc.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.9.0",
+    "@types/react": "^18.3.31",
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
+    "happy-dom": "^20.14.6",
     "jose": "^6.2.2",
     "playwright": "^1.56.0",
     "prettier": "^3.6.2",
+    "react": "^18.3.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.70.1",
@@ -84,5 +110,6 @@
   "contributors": [
     "Senti100 (original author)",
     "Livia Zhang"
-  ]
+  ],
+  "icon": "./icon.svg"
 }

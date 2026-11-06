@@ -134,6 +134,10 @@ try {
   if (!String(profile.dependencies?.[manifest.name]).startsWith('file:')) {
     throw new Error('plugin was not recorded in the profile from the local tarball')
   }
+  // A package with dsh.bundle.patch is enabled as a profile layer on install.
+  if (!profile.dsh?.profile?.bundles?.includes(manifest.name)) {
+    throw new Error('plugin was installed as a plain dependency, not an enabled bundle')
+  }
 
   const testEnvironment = {
     ...environment,

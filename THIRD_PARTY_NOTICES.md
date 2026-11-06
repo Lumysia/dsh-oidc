@@ -1,6 +1,8 @@
 # Third-party notices
 
-No DeepSeek or other third-party source was copied or substantially adapted into this repository.
+## DeepSeek Harness (MIT)
+
+`src/client/styles.ts` adapts the launcher geometry of `@deepseek-ai/dsh-client-ui-settings-account` (`AccountMenu.module.css`, `AccountAvatar.module.css`), and `src/client/AccountMenu.tsx` copies that package's `LogoutIcon` glyph path, so the sidebar account button matches DSH's own. DeepSeek Harness is distributed under the MIT License; its copyright notice: Copyright (c) 2026 DeepSeek. No other DeepSeek or third-party source was copied or substantially adapted into this repository.
 
 ## Production dependencies and peers
 

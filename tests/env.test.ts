@@ -50,9 +50,7 @@ describe('DSH_OIDC_* environment precedence', () => {
 
   it('lets the row narrow admission with extra categories but never widen it', () => {
     const layer = readEnvironment(env, row)
-    const config = resolveConfig(
-      applyEnvironment({ ...row, allowedGroups: ['operators'] }, layer),
-    )
+    const config = resolveConfig(applyEnvironment({ ...row, allowedGroups: ['operators'] }, layer))
     expect(config.policy.allowedGroups.has('operators')).toBe(true)
     expect(config.policy.allowedSubjects.size).toBe(1)
   })

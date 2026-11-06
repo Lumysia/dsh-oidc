@@ -12,9 +12,17 @@ const expectedFiles = [
   'README.md',
   'SECURITY.md',
   'THIRD_PARTY_NOTICES.md',
+  'cordis.patch.yml',
   'dist/admission.d.ts',
   'dist/compatibility.d.ts',
+  'dist/client.js',
+  'dist/client/AccountMenu.d.ts',
+  'dist/client/index.d.ts',
+  'dist/client/locales.d.ts',
+  'dist/client/profile.d.ts',
+  'dist/client/styles.d.ts',
   'dist/config.d.ts',
+  'dist/env.d.ts',
   'dist/index.d.ts',
   'dist/index.js',
   'dist/index.js.map',
@@ -24,8 +32,10 @@ const expectedFiles = [
   'docs/deployment.md',
   'docs/interoperability.md',
   'docs/threat-model.md',
+  'icon.svg',
+  'locale/en.json',
+  'locale/zh.json',
   'examples/Caddyfile',
-  'examples/cordis.patch.yml',
   'package.json',
 ]
 
@@ -70,8 +80,20 @@ try {
     throw new Error('packed default export does not point to dist/index.js')
   if (manifest.exports?.['.']?.types !== './dist/index.d.ts')
     throw new Error('packed type export does not point to dist/index.d.ts')
-  if (manifest.exports?.['./client'] !== undefined)
-    throw new Error('Host-only package unexpectedly exports a client entry')
+  if (manifest.exports?.['./client']?.default !== './dist/client.js')
+    throw new Error('packed client export does not point to dist/client.js')
+  if (manifest.dsh?.bundle?.patch !== './cordis.patch.yml')
+    throw new Error('packed manifest does not declare its bundle patch')
+  const client = readFileSync(join(extracted, 'package/dist/client.js'), 'utf8')
+  if (!client.startsWith(`window.__ModuleLoader__.load({ id: ${JSON.stringify(manifest.name)},`))
+    throw new Error('dist/client.js is not in the DSH client module factory format')
+  for (const language of ['en', 'zh']) {
+    const { meta } = JSON.parse(
+      readFileSync(join(extracted, `package/locale/${language}.json`), 'utf8'),
+    )
+    if (typeof meta?.title !== 'string' || typeof meta?.description !== 'string')
+      throw new Error(`locale/${language}.json lacks meta.title or meta.description`)
+  }
 
   console.log(`package inventory and extraction ok: ${String(expectedFiles.length)} files`)
 } finally {

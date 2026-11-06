@@ -44,7 +44,7 @@ function stringArray(name: string, raw: string): string[] {
   const values = jsonArray(name, raw)
   if (!values.every((value) => typeof value === 'string'))
     throw new Error(`dsh-oidc: ${name} must be a JSON array of strings`)
-  return values as string[]
+  return values
 }
 
 /**
@@ -123,6 +123,9 @@ export function readEnvironment(
  * allowlist or trust list. Extra allow categories in the profile still apply,
  * because categories are ANDed and can only narrow admission.
  */
-export function applyEnvironment(config: Partial<Config>, layer: EnvironmentLayer): Partial<Config> {
+export function applyEnvironment(
+  config: Partial<Config>,
+  layer: EnvironmentLayer,
+): Partial<Config> {
   return { ...config, ...layer.values }
 }

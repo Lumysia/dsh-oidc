@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Ship as a DSH bundle: the package's own `cordis.patch.yml` adds the `lumysia-oidc` row and turns off the startup bearer-URL print, `locale/en.json` and `locale/zh.json` give it a title and description, and `icon.svg` an icon. It shows on the Plugins page with a switch. Profiles must drop their hand-written row and `web-runtime` override (see the deployment guide).
+- Read site values from `DSH_OIDC_*` in DSH's environment (`ISSUER`, `CLIENT_ID`, `PUBLIC_ORIGIN`, `CLIENT_SECRET_REF`, `ALLOWED_SUBJECTS`, `ALLOWED_EMAILS`, `ALLOWED_GROUPS`, `TRUSTED_PROXIES`, `DIRECT_LOGIN`). A set variable wins over the row config for that field. Without the required values the plugin refuses to start and registers no route.
+- Add the sidebar account button: the signed-in user's picture or initials and name in DSH's `settings.launcher` seat, with Settings and Sign out. It reads the new `GET /_dsh-oidc/session` (display claims and the logout CSRF value for a live same-origin session, guarded by the proxy like the app) and signs out through the existing CSRF-protected POST.
+- Keep `email`, `preferred_username` and an HTTPS `picture` from the validated ID token in the in-memory session for that button.
+- Remove `examples/cordis.patch.yml`; the bundle layer replaces it.
 - Fix: after a real provider's consent page the browser arrived at DSH cross-site, so DSH's `SameSite=Strict` cookie was set but never sent and the user saw "authentication required". The callback now answers with a small same-origin page that continues to DSH's token exchange, making that hop same-site.
 - Add `directLogin`: signed-out browser navigations go straight to the provider instead of the bundled sign-in page. Off by default.
 - Fix: compare the ID token `iss` with the issuer exactly as configured. A bare-origin issuer such as `https://id.example` was normalized to `https://id.example/` and every login was denied.
@@ -10,7 +15,7 @@
 
 First release of the Lumysia/dsh-oidc fork. The OIDC, session, policy, and proxy design from Senti100/dsh-oidc is unchanged.
 
-- Rename the package to `@lumysia/dsh-oidc` and the Cordis plugin to `lumysia-oidc`. Existing profiles must update the `name` and `id` in their patch (see `examples/cordis.patch.yml`).
+- Rename the package to `@lumysia/dsh-oidc` and the Cordis plugin to `lumysia-oidc`. Existing profiles must update the `name` and `id` in their patch.
 - Support the DSH 0.2 line instead of exactly 0.2.0-rc.2: DSH peers are `>=0.2.1-rc.1 <0.3.0-0`, Cordis `^4.0.5`. Tested with DSH 0.2.1-rc.1 and 0.2.2-rc.1. DSH 0.2.2 refuses plugins whose DSH peers do not match the running release, so the old exact pins no longer load.
 - Replace the startup version check with an API check: the plugin refuses to start only when `ctx.effect`, `webServer.register`, `connection.authenticatedUrl`, or `credentials.resolve` is missing, and names it.
 - Add `trustedProxies` (IPs or CIDR ranges) for the proxy allowed to set `X-Dsh-Oidc-Client-Ip`. Default stays loopback only. Needed when Caddy reaches DSH from another container.

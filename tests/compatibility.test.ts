@@ -66,7 +66,6 @@ describe('DSH host seam check', () => {
       expect(manifest.peerDependencies[peer]).toBe(manifest.engines.dsh)
     }
     expect(manifest.engines.dsh).toMatch(/^>=0\.2\.1-rc\.1 <0\.3\.0-0$/u)
-    expect(manifest.exports).not.toHaveProperty('./client')
   })
 
   it('accepts a host that provides every seam', () => {

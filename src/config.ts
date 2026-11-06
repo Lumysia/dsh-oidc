@@ -200,11 +200,11 @@ export function resolveConfig(config: Config): ResolvedConfig {
         `dsh-oidc: ${field} is required (set it in the plugin config or the DSH_OIDC_* environment)`,
       )
   }
-  const issuerId = config.issuer as string
-  const clientId = config.clientId as string
+  const issuerId = config.issuer!
+  const clientId = config.clientId!
   const issuer = exactHttpsUrl(issuerId, 'issuer')
 
-  const publicOrigin = exactHttpsUrl(config.publicOrigin as string, 'publicOrigin')
+  const publicOrigin = exactHttpsUrl(config.publicOrigin!, 'publicOrigin')
   if (publicOrigin.pathname !== '/')
     throw new Error('dsh-oidc: publicOrigin must be an origin with path /')
   const scopes = exactStrings(config.scopes ?? ['openid', 'profile', 'email'], 'scopes')

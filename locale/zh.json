@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OpenID Connect 登录",
+    "description": "打开 DSH Web 前需要通过 OpenID Connect 登录，并在侧边栏添加带退出登录的账户按钮。"
+  }
+}
