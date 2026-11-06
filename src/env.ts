@@ -17,6 +17,7 @@ export const ENVIRONMENT_FIELDS = {
   DSH_OIDC_ALLOWED_GROUPS: 'allowedGroups',
   DSH_OIDC_TRUSTED_PROXIES: 'trustedProxies',
   DSH_OIDC_DIRECT_LOGIN: 'directLogin',
+  DSH_OIDC_ALLOW_ANY_USER: 'allowAnyUser',
 } as const satisfies Record<string, keyof Config>
 
 export type EnvironmentVariable = keyof typeof ENVIRONMENT_FIELDS
@@ -111,6 +112,8 @@ export function readEnvironment(
     values.trustedProxies = stringArray('DSH_OIDC_TRUSTED_PROXIES', proxies)
   const direct = read('DSH_OIDC_DIRECT_LOGIN')
   if (direct !== undefined) values.directLogin = boolean('DSH_OIDC_DIRECT_LOGIN', direct)
+  const anyUser = read('DSH_OIDC_ALLOW_ANY_USER')
+  if (anyUser !== undefined) values.allowAnyUser = boolean('DSH_OIDC_ALLOW_ANY_USER', anyUser)
   const fields = (Object.values(ENVIRONMENT_FIELDS) as EnvironmentField[]).filter(
     (field) => values[field] !== undefined,
   )

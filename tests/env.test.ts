@@ -85,6 +85,11 @@ describe('DSH_OIDC_* environment precedence', () => {
     expect(() => readEnvironment(variables, row)).toThrow(pattern)
   })
 
+  it('reads DSH_OIDC_ALLOW_ANY_USER as a strict boolean', () => {
+    expect(readEnvironment({ DSH_OIDC_ALLOW_ANY_USER: 'true' }, {}).values.allowAnyUser).toBe(true)
+    expect(() => readEnvironment({ DSH_OIDC_ALLOW_ANY_USER: 'yes' }, {})).toThrow(/true or false/u)
+  })
+
   it('needs an issuer for bare subjects', () => {
     expect(() => readEnvironment({ DSH_OIDC_ALLOWED_SUBJECTS: '["s"]' }, {})).toThrow(/issuer/u)
   })

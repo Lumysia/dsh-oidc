@@ -80,6 +80,22 @@ describe('configuration and policy', () => {
     expect(() => resolveConfig(input)).toThrow(pattern)
   })
 
+  it('needs an allow policy unless allowAnyUser leaves access to the provider', () => {
+    const open = { ...base, allowedSubjects: undefined }
+    expect(() => resolveConfig(open)).toThrow(/at least one allow policy/u)
+    expect(() => resolveConfig({ ...open, allowAnyUser: false })).toThrow(/allowAnyUser/u)
+    const config = resolveConfig({ ...open, allowAnyUser: true })
+    const claims = { iss: open.issuer, sub: 'anyone' }
+    expect(authorizeClaims(claims, config.issuerId, config.policy)?.subject).toBe('anyone')
+    // The issuer check still applies.
+    expect(
+      authorizeClaims({ ...claims, iss: 'https://other.example/' }, config.issuerId, config.policy),
+    ).toBeUndefined()
+    // Extra categories still narrow admission.
+    const narrowed = resolveConfig({ ...open, allowAnyUser: true, allowedGroups: ['ops'] })
+    expect(authorizeClaims(claims, narrowed.issuerId, narrowed.policy)).toBeUndefined()
+  })
+
   it('ANDs configured categories while allowing values within a category', () => {
     const policy = resolveConfig({
       ...base,

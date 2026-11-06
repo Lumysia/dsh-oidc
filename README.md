@@ -52,6 +52,7 @@ Values for the site are supplied by the environment of the DSH process. Any vari
 | `DSH_OIDC_ALLOWED_GROUPS`    | `allowedGroups`   | JSON array of strings                                                    |
 | `DSH_OIDC_TRUSTED_PROXIES`   | `trustedProxies`  | JSON array of IPs or CIDR ranges                                         |
 | `DSH_OIDC_DIRECT_LOGIN`      | `directLogin`     | `true` or `false`                                                        |
+| `DSH_OIDC_ALLOW_ANY_USER`    | `allowAnyUser`    | `true` or `false`                                                        |
 
 A malformed value stops the plugin with a message naming the variable, never the value. At startup the log names which fields came from the environment.
 
@@ -72,8 +73,9 @@ DSH's Plugins page edits only fields a plugin declares volatile, and this plugin
 | `sessionIdleTimeoutSeconds` | Idle expiry (default 30 minutes). Provider policy changes do not invalidate an already-issued session before these limits.                                          |
 | `trustedProxies`            | Socket peers (IPs or CIDR ranges) allowed to set `X-Dsh-Oidc-Client-Ip`. Default `["127.0.0.0/8", "::1"]`. See [Trusted proxies](#trusted-proxies).                 |
 | `directLogin`               | Send signed-out browser navigations straight to the provider instead of the bundled sign-in page (default `false`).                                                 |
+| `allowAnyUser`              | Admit every account the provider signs in, when access is already restricted at the provider (an application group, for example). Default `false`.                  |
 
-At least one allow category is mandatory. Every configured category is ANDed; values within subject, email, and `any` group categories are ORed. Match comparison is byte-exact with no case folding or substring behavior. Explicit empty policy lists are invalid. Group claims must be nonempty bounded arrays of unique nonempty bounded strings; scalar groups always deny. Custom required claims may be one bounded nonempty string or the same bounded unique-string array shape.
+At least one allow category is mandatory unless `allowAnyUser` is `true`; it cannot be switched on by an empty list or a missing value. Every configured category is ANDed; values within subject, email, and `any` group categories are ORed. Match comparison is byte-exact with no case folding or substring behavior. Explicit empty policy lists are invalid. Group claims must be nonempty bounded arrays of unique nonempty bounded strings; scalar groups always deny. Custom required claims may be one bounded nonempty string or the same bounded unique-string array shape.
 
 See the [deployment guide](docs/deployment.md), the bundle layer [`cordis.patch.yml`](cordis.patch.yml), [`examples/Caddyfile`](examples/Caddyfile), and [`.env.example`](.env.example). Before sign-in, the bare root returns 401 to API clients; a **browser navigation** is redirected to the bundled sign-in page at `/auth/signin`, whose Sign-in button starts OIDC at `/auth/login`. With `directLogin: true` the navigation goes straight to `/auth/login` and the provider instead. The redirect triggers only on `sec-fetch-mode: navigate` (or an HTML-only `Accept` when the header is absent); `fetch`/XHR/WebSocket subrequests keep the plain 401 because Caddy's `forward_auth` subrequest copies no such navigation signals. The page is self-contained inline HTML with a strict CSP and no external assets. The package is not published to npm; install a GitHub release tarball or one built from this checkout. The client secret value stays behind `ctx.credentials`; only its reference name is configuration.
 

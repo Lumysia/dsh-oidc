@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `allowAnyUser` (`DSH_OIDC_ALLOW_ANY_USER`) for deployments that restrict access at the provider. Without it an empty policy still refuses to start.
 - Ship as a DSH bundle: the package's own `cordis.patch.yml` adds the `lumysia-oidc` row and turns off the startup bearer-URL print, `locale/en.json` and `locale/zh.json` give it a title and description, and `icon.svg` an icon. It shows on the Plugins page with a switch. Profiles must drop their hand-written row and `web-runtime` override (see the deployment guide).
 - Read site values from `DSH_OIDC_*` in DSH's environment (`ISSUER`, `CLIENT_ID`, `PUBLIC_ORIGIN`, `CLIENT_SECRET_REF`, `ALLOWED_SUBJECTS`, `ALLOWED_EMAILS`, `ALLOWED_GROUPS`, `TRUSTED_PROXIES`, `DIRECT_LOGIN`). A set variable wins over the row config for that field. Without the required values the plugin refuses to start and registers no route.
 - Add the sidebar account button: the signed-in user's picture or initials and name in DSH's `settings.launcher` seat, with Settings and Sign out. It reads the new `GET /_dsh-oidc/session` (display claims and the logout CSRF value for a live same-origin session, guarded by the proxy like the app) and signs out through the existing CSRF-protected POST.
