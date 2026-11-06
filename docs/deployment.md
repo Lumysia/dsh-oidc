@@ -38,7 +38,7 @@ dsh plugin --profile web-oidc add "file:$TARBALL"
 
 DSH checks the plugin's DSH peer range against the running release during `plugin add` and refuses an incompatible pair. A `file:` install refers to the tarball by path, so keep it. pnpm caches a tarball by version: reinstalling the same version keeps the old files, so bump the version for every rebuild.
 
-**Upgrading from a hand-written profile row** (0.3.0-alpha.0 and earlier, or `@senti100/dsh-oidc`): back up the profile's `cordis.patch.yml`, move the row's values into the `DSH_OIDC_*` environment, then delete the `lumysia-oidc` (or `senti100-oidc`) insert and the `web-runtime` row from the profile patch; the bundle supplies both. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
+**Upgrading from a hand-written profile row** (0.3.0-alpha.0 and earlier, or `@senti100/dsh-oidc`): back up the profile's `cordis.patch.yml`, move the row's values into the `DSH_OIDC_*` environment, then delete the `lumysia-oidc` (or `senti100-oidc`) insert and the `web-runtime` row from the profile patch; the bundle supplies both. DSH enables a bundle only when its package is newly added, so after upgrading a package the profile already depended on, add `@lumysia/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json` yourself (or switch it on in **Plugins**) before restarting. Until then no row is loaded, `/auth/check` is missing and the proxy denies everything. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
 
 ## Configure the OIDC provider and credentials
 
