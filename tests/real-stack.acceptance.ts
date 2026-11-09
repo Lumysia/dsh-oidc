@@ -943,7 +943,7 @@ describe(
 
     it(
       'shows the OIDC account button with Settings and sign-out in the sidebar',
-      { timeout: 90_000 },
+      { timeout: 120_000 },
       async () => {
         if (page === undefined || context === undefined) throw new Error('browser context absent')
         await page.setViewportSize({ width: 1280, height: 800 })
@@ -1015,52 +1015,86 @@ describe(
           ),
         ).toBe(1)
 
-        // DSH's first-run dialogs (the preview notice, then the model onboarding)
-        // open at any point after load and make the page inert until dismissed.
-        const settleDeadline = Date.now() + 30_000
-        for (;;) {
-          const state = await page.evaluate(() => {
-            const button = document.querySelector('[data-dsh-oidc-account] button')
-            return {
-              dialog: document.querySelector('[role="dialog"],[aria-modal="true"]') !== null,
-              inert: button === null || button.closest('[inert]') !== null,
-            }
-          }, undefined)
-          if (!state.dialog && !state.inert) break
-          if (Date.now() > settleDeadline) {
-            const detail = await page.evaluate(
-              () => ({
-                dialogs: Array.from(
-                  document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
-                ).map((node) => (node as HTMLElement).outerHTML.slice(0, 600)),
-                inert: Array.from(document.querySelectorAll('[inert]')).map((node) =>
-                  (node as HTMLElement).outerHTML.slice(0, 200),
-                ),
-              }),
-              undefined,
-            )
-            throw new Error(`DSH dialogs did not settle: ${JSON.stringify({ state, detail })}`)
-          }
-          if (state.dialog) {
-            const dismiss = page.locator(
-              '[role="dialog"] button[aria-label="Close"], [role="dialog"] button:text-is("Continue")',
-            )
-            if ((await dismiss.count()) > 0) await dismiss.first().click()
-          }
-          await delay(250)
-        }
-        await delay(1_000)
-        await trigger.click()
+        // DSH's first-run steps (the welcome notice, then the model onboarding with
+        // its "Get started" sign-in dialog) each open a modal dialog that masks the
+        // page. A step renders nothing while it loads its data, so the page can look
+        // idle for a moment between two dialogs; only a quiet spell with no dialog
+        // and no inert root counts as settled, and a dialog that still arrives late
+        // and takes the click sends the menu opening back to settling.
+        // Closures below lose the narrowing of `page`.
+        const view = page
         const menu = page.getByRole('menu')
-        await menu.waitFor({ state: 'visible' })
+        const dismissed: string[] = []
+        const settleDialogs = async (deadline: number) => {
+          let quietSince = Date.now()
+          for (;;) {
+            const state = await view.evaluate(() => {
+              const button = document.querySelector('[data-dsh-oidc-account] button')
+              const dialog = document.querySelector('[role="dialog"],[aria-modal="true"]')
+              return {
+                dialog: dialog?.getAttribute('aria-label') ?? (dialog === null ? null : ''),
+                inert: button === null || button.closest('[inert]') !== null,
+              }
+            }, undefined)
+            if (state.dialog === null && !state.inert) {
+              if (Date.now() - quietSince >= 2_000) return
+            } else {
+              quietSince = Date.now()
+            }
+            if (Date.now() > deadline) {
+              const detail = await view.evaluate(
+                () => ({
+                  dialogs: Array.from(
+                    document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
+                  ).map((node) => (node as HTMLElement).outerHTML.slice(0, 600)),
+                  inert: Array.from(document.querySelectorAll('[inert]')).map((node) =>
+                    (node as HTMLElement).outerHTML.slice(0, 200),
+                  ),
+                }),
+                undefined,
+              )
+              throw new Error(
+                `DSH dialogs did not settle: ${JSON.stringify({ state, dismissed, detail })}`,
+              )
+            }
+            if (state.dialog !== null) {
+              const dismiss = view.locator(
+                '[role="dialog"] button[aria-label="Close"], [role="dialog"] button:text-is("Continue")',
+              )
+              if ((await dismiss.count()) > 0) {
+                await dismiss.first().click()
+                dismissed.push(state.dialog)
+                console.log(`TEMPDIAG dismissed ${state.dialog} at ${String(Date.now())}`)
+              }
+            }
+            await delay(250)
+          }
+        }
+        const openMenu = async () => {
+          const deadline = Date.now() + 45_000
+          for (;;) {
+            await settleDialogs(deadline)
+            try {
+              await trigger.click({ timeout: 5_000 })
+              await menu.waitFor({ state: 'visible', timeout: 5_000 })
+              return
+            } catch (error) {
+              if (Date.now() > deadline) throw error
+            }
+          }
+        }
+        console.log(`TEMPDIAG menu-open-start ${String(Date.now())}`)
+        await openMenu()
         expect(await menu.textContent()).toContain('Settings')
         expect(await menu.textContent()).toContain('Sign out')
         // An open menu masks the page, as DSH's own menus do; a click outside closes it.
-        const view = page
         const toggleMenu = async (state: 'visible' | 'hidden') => {
-          if (state === 'hidden') await view.mouse.click(900, 300)
-          else await trigger.click()
-          await menu.waitFor({ state })
+          if (state === 'hidden') {
+            await view.mouse.click(900, 300)
+            await menu.waitFor({ state })
+          } else {
+            await openMenu()
+          }
         }
         if (screenshotDirectory !== undefined) {
           mkdirSync(screenshotDirectory, { recursive: true })
@@ -1088,8 +1122,7 @@ describe(
         await page.getByRole('dialog').first().waitFor({ state: 'visible' })
         await page.keyboard.press('Escape')
 
-        await trigger.click()
-        await menu.waitFor({ state: 'visible' })
+        await openMenu()
         const loggedOut = page.waitForResponse((response) =>
           response.url().startsWith(`${publicOrigin}/auth/logout`),
         )
