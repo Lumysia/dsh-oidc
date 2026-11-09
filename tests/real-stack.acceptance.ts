@@ -1064,7 +1064,6 @@ describe(
               if ((await dismiss.count()) > 0) {
                 await dismiss.first().click()
                 dismissed.push(state.dialog)
-                console.log(`TEMPDIAG dismissed ${state.dialog} at ${String(Date.now())}`)
               }
             }
             await delay(250)
@@ -1083,7 +1082,6 @@ describe(
             }
           }
         }
-        console.log(`TEMPDIAG menu-open-start ${String(Date.now())}`)
         await openMenu()
         expect(await menu.textContent()).toContain('Settings')
         expect(await menu.textContent()).toContain('Sign out')
