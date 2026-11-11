@@ -50,7 +50,7 @@ const config = {
 
 describe('DSH host seam check', () => {
   it('exposes the Cordis plugin shape', () => {
-    expect(name).toBe('lumysia-oidc')
+    expect(name).toBe('soffits-oidc')
     expect(inject).toEqual(['webServer', 'connection', 'credentials'])
     expect(typeof apply).toBe('function')
     expect(REQUIRED_SEAMS.map(({ service }) => service).sort()).toEqual([...inject].sort())

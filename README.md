@@ -1,4 +1,4 @@
-# @lumysia/dsh-oidc
+# @soffits/dsh-oidc
 
 Provider-neutral OpenID Connect sign-in for the DeepSeek Harness (DSH) Web profile. It uses Authorization Code + PKCE through `openid-client`, then hands a successful browser to DSH's unchanged native Connection plugin.
 
@@ -26,7 +26,7 @@ The button reads `GET /_dsh-oidc/session`; that endpoint responds only for a liv
 
 ### Turning it off
 
-A switch for the bundle appears on the **Plugins** page, and its `lumysia-oidc` row has a separate one. Disabling either switch unregisters all `/auth/*` routes. `/auth/check` then returns 404 to Caddy's `forward_auth`, which it interprets as denial; as a result, every application path through the proxy answers 404, including stale native cookies: the gate defaults to closed on failure. The real-stack test verifies this. DSH could be reopened only by a reconfigured proxy, something the plugin cannot control. For another sign-in, re-enable it from a shell that runs on the DSH host: either restore `@lumysia/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json`, or delete the `lumysia-oidc` `disabled: true` override from the profile's `cordis.patch.yml`; then restart DSH (or allow HMR to pick it up).
+A switch for the bundle appears on the **Plugins** page, and its `soffits-oidc` row has a separate one. Disabling either switch unregisters all `/auth/*` routes. `/auth/check` then returns 404 to Caddy's `forward_auth`, which it interprets as denial; as a result, every application path through the proxy answers 404, including stale native cookies: the gate defaults to closed on failure. The real-stack test verifies this. DSH could be reopened only by a reconfigured proxy, something the plugin cannot control. For another sign-in, re-enable it from a shell that runs on the DSH host: either restore `@soffits/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json`, or delete the `soffits-oidc` `disabled: true` override from the profile's `cordis.patch.yml`; then restart DSH (or allow HMR to pick it up).
 
 ## Compatibility
 
@@ -56,7 +56,7 @@ Values for the site are supplied by the environment of the DSH process. Any vari
 
 A malformed value stops the plugin with a message naming the variable, never the value. At startup the log names which fields came from the environment.
 
-DSH's Plugins page edits only fields a plugin declares volatile, and this plugin declares none, because a change to any of them must restart the routes. So the page shows the bundle, its switch and the row, but no editable form; there is nothing in the UI that could override an environment value. The remaining fields (session lifetimes, scopes, group mode, required claims and so on) are ordinary row config: add them under `config:` in an override of the `lumysia-oidc` row in the profile patch. Extra allow categories there still apply, since categories are ANDed and can only narrow admission.
+DSH's Plugins page edits only fields a plugin declares volatile, and this plugin declares none, because a change to any of them must restart the routes. So the page shows the bundle, its switch and the row, but no editable form; there is nothing in the UI that could override an environment value. The remaining fields (session lifetimes, scopes, group mode, required claims and so on) are ordinary row config: add them under `config:` in an override of the `soffits-oidc` row in the profile patch. Extra allow categories there still apply, since categories are ANDed and can only narrow admission.
 
 | Field                       | Meaning                                                                                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

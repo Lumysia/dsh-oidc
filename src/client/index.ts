@@ -1,5 +1,5 @@
 /**
- * Browser half of @lumysia/dsh-oidc: the sidebar account button.
+ * Browser half of @soffits/dsh-oidc: the sidebar account button.
  *
  * It occupies `settings.launcher`, the seat at the sidebar foot that DSH's own
  * DeepSeek account menu fills, so it inherits that seat's geometry, the

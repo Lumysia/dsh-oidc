@@ -1,5 +1,5 @@
 /** Locale namespace for the sidebar account launcher. */
-export const NS = 'lumysia-oidc'
+export const NS = 'soffits-oidc'
 
 export const en = {
   menu: 'Account',

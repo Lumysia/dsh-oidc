@@ -1,5 +1,5 @@
 {
-  "name": "@lumysia/dsh-oidc",
+  "name": "@soffits/dsh-oidc",
   "version": "0.3.0-alpha.2",
   "description": "Provider-neutral OpenID Connect admission for DeepSeek Harness Web",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Lumysia/dsh-oidc.git"
+    "url": "git+https://github.com/soffits/dsh-oidc.git"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -103,13 +103,14 @@
     "minimatch": "^11.0.1",
     "zod": "^4.6.6"
   },
-  "homepage": "https://github.com/Lumysia/dsh-oidc#readme",
+  "homepage": "https://github.com/soffits/dsh-oidc#readme",
   "bugs": {
-    "url": "https://github.com/Lumysia/dsh-oidc/issues"
+    "url": "https://github.com/soffits/dsh-oidc/issues"
   },
   "contributors": [
     "Senti100 (original author)",
-    "Livia Zhang"
+    "Livia Zhang",
+    "Sakina"
   ],
   "icon": "./icon.svg"
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The project moved to [soffits/dsh-oidc](https://github.com/soffits/dsh-oidc). The package is renamed from `@lumysia/dsh-oidc` to `@soffits/dsh-oidc` and its Cordis row and plugin name from `lumysia-oidc` to `soffits-oidc`; the browser half's CSS classes, style id and locale namespace use the `soffits-` prefix. The old names have no alias. Existing profiles must replace `@lumysia/dsh-oidc` with `@soffits/dsh-oidc` (dependency and `dsh.profile.bundles` entry, installed from the new release tarball `soffits-dsh-oidc-<version>.tgz`) and change any `- id: lumysia-oidc` override in their `cordis.patch.yml` to `- id: soffits-oidc`; an override with the old id matches no row and is skipped. See the deployment guide.
+
 ## 0.3.0-alpha.2
 
 - Add `allowAnyUser` (`DSH_OIDC_ALLOW_ANY_USER`) for deployments that restrict access at the provider. Without it an empty policy still refuses to start.

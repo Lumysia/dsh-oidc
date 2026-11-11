@@ -1,6 +1,6 @@
 # Install and operate DSH OIDC (DSH Web 0.2.x)
 
-This guide installs the plugin as a DSH bundle, either from a GitHub release tarball or from a tarball built from a checkout of this repository; `@lumysia/dsh-oidc` is not published to npm. Try it in a disposable DSH home first, then back up any real home and proxy configuration before repeating it. Do not copy provider exports, session cookies, client secrets, or real subject IDs into a Git checkout or support ticket.
+This guide installs the plugin as a DSH bundle, either from a GitHub release tarball or from a tarball built from a checkout of this repository; `@soffits/dsh-oidc` is not published to npm. Try it in a disposable DSH home first, then back up any real home and proxy configuration before repeating it. Do not copy provider exports, session cookies, client secrets, or real subject IDs into a Git checkout or support ticket.
 
 ## Prerequisites and topology
 
@@ -17,14 +17,14 @@ When Caddy runs in another container, DSH has to listen on its container address
 
 ## Install into a profile
 
-The package is a DSH bundle: its own `cordis.patch.yml` adds the `lumysia-oidc` row (and turns off the startup bearer-URL print), so the profile needs no row of its own. Installing it enables the bundle, which records it in the profile's `package.json` under `dsh.profile.bundles`. It then shows on the sidebar **Plugins** page with its title, description and switch, and its row appears under **Settings → Built-in plugins**.
+The package is a DSH bundle: its own `cordis.patch.yml` adds the `soffits-oidc` row (and turns off the startup bearer-URL print), so the profile needs no row of its own. Installing it enables the bundle, which records it in the profile's `package.json` under `dsh.profile.bundles`. It then shows on the sidebar **Plugins** page with its title, description and switch, and its row appears under **Settings → Built-in plugins**.
 
 From a release (pin the version you reviewed):
 
 ```sh
 export DSH_HOME=/path/to/isolated-dsh-home
 dsh --profile web-oidc --from-default-profile web --dump-config >/dev/null
-dsh plugin --profile web-oidc add https://github.com/Lumysia/dsh-oidc/releases/download/v<version>/lumysia-dsh-oidc-<version>.tgz
+dsh plugin --profile web-oidc add https://github.com/soffits/dsh-oidc/releases/download/v<version>/soffits-dsh-oidc-<version>.tgz
 ```
 
 Or from a checkout:
@@ -38,7 +38,14 @@ dsh plugin --profile web-oidc add "file:$TARBALL"
 
 DSH checks the plugin's DSH peer range against the running release during `plugin add` and refuses an incompatible pair. A `file:` install refers to the tarball by path, so keep it. pnpm caches a tarball by version: reinstalling the same version keeps the old files, so bump the version for every rebuild.
 
-**Upgrading from a hand-written profile row** (0.3.0-alpha.0 and earlier, or `@senti100/dsh-oidc`): back up the profile's `cordis.patch.yml`, move the row's values into the `DSH_OIDC_*` environment, then delete the `lumysia-oidc` (or `senti100-oidc`) insert and the `web-runtime` row from the profile patch; the bundle supplies both. DSH enables a bundle only when its package is newly added, so after upgrading a package the profile already depended on, add `@lumysia/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json` yourself (or switch it on in **Plugins**) before restarting. Until then no row is loaded, `/auth/check` is missing and the proxy denies everything. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
+**Upgrading from a hand-written profile row** (0.3.0-alpha.0 and earlier, or `@senti100/dsh-oidc`): back up the profile's `cordis.patch.yml`, move the row's values into the `DSH_OIDC_*` environment, then delete the `lumysia-oidc` (or `senti100-oidc`) insert and the `web-runtime` row from the profile patch; the bundle supplies both. DSH enables a bundle only when its package is newly added, so after upgrading a package the profile already depended on, add `@soffits/dsh-oidc` to `dsh.profile.bundles` in the profile's `package.json` yourself (or switch it on in **Plugins**) before restarting. Until then no row is loaded, `/auth/check` is missing and the proxy denies everything. Upgrading DSH itself restarts it, which signs everyone out (sessions are in memory).
+
+**Upgrading from `@lumysia/dsh-oidc`** (0.3.0-alpha.2 and earlier): the project moved to soffits/dsh-oidc, and the package and row were renamed to `@soffits/dsh-oidc` and `soffits-oidc`. There is no alias for the old names. Back up the profile, then:
+
+1. Remove the old package: `dsh plugin --profile <name> remove @lumysia/dsh-oidc`, and delete `@lumysia/dsh-oidc` from `dsh.profile.bundles` in the profile's `package.json` if it is still listed.
+2. Install the new release tarball as above. Check that `dsh.profile.bundles` now lists `@soffits/dsh-oidc`; add it yourself if not.
+3. If the profile's `cordis.patch.yml` overrides the row (`- id: lumysia-oidc`, for extra `config:` or `disabled: true`), change that id to `soffits-oidc`. DSH warns about an override whose id matches no row and skips it, so an old-id override silently stops applying.
+4. Restart DSH. The `DSH_OIDC_*` environment and the proxy configuration stay as they are.
 
 ## Configure the OIDC provider and credentials
 

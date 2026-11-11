@@ -15,12 +15,12 @@ describe('proxy and composition security examples', () => {
     expect(manifest.exports['./cordis.patch.yml']).toBe('./cordis.patch.yml')
     expect(manifest.exports['./client']).toEqual({ default: './dist/client.js' })
     expect(manifest.dsh.client.platform).toBe('web')
-    expect(patch).toContain("name: '@lumysia/dsh-oidc'")
-    expect(patch).toContain('- id: lumysia-oidc')
+    expect(patch).toContain("name: '@soffits/dsh-oidc'")
+    expect(patch).toContain('- id: soffits-oidc')
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-connection'")
     expect(patch).toContain('inject: [webServer, connection, credentials]')
     // Site values come from DSH_OIDC_* in the environment, never the shipped layer.
-    const row = patch.slice(patch.indexOf('- id: lumysia-oidc'))
+    const row = patch.slice(patch.indexOf('- id: soffits-oidc'))
     expect(row).not.toMatch(/^\s+(?:config|issuer|clientId|publicOrigin|allowedSubjects):/mu)
     expect(patch).not.toMatch(/clientSecret:\s/u)
     // A patch row replaces the whole config: keep upstream's other values so --no-open still works.
