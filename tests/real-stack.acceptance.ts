@@ -692,8 +692,8 @@ describe(
       const profile = JSON.parse(
         readFileSync(join(dshHome, 'profiles/web/package.json'), 'utf8'),
       ) as { dsh?: { profile?: { bundles?: string[] } } }
-      expect(profile.dsh?.profile?.bundles).toContain('@lumysia/dsh-oidc')
-      expect(readFileSync(profilePatch, 'utf8')).not.toContain('lumysia')
+      expect(profile.dsh?.profile?.bundles).toContain('@soffits/dsh-oidc')
+      expect(readFileSync(profilePatch, 'utf8')).not.toContain('soffits-oidc')
       expect(dshOutput).not.toContain('?token=')
       expect(dshOutput).not.toContain('opening the default browser')
       expect(dshOutput).not.toContain('synthetic-operator')
@@ -993,7 +993,7 @@ describe(
           }
         }, undefined)
         expect(bundles.result.ok, JSON.stringify(bundles).slice(0, 2000)).toBe(true)
-        const bundle = bundles.result.value.find((entry) => entry.name === '@lumysia/dsh-oidc')
+        const bundle = bundles.result.value.find((entry) => entry.name === '@soffits/dsh-oidc')
         expect(
           bundle,
           JSON.stringify(bundles.result.value.map((entry) => entry.name)),
@@ -1001,7 +1001,7 @@ describe(
         expect(bundle?.enabled).toBe(true)
         expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect sign-in')
         expect(JSON.stringify(bundle?.meta)).toContain('OpenID Connect 登录')
-        expect(JSON.stringify(bundle?.rows)).toContain('lumysia-oidc')
+        expect(JSON.stringify(bundle?.rows)).toContain('soffits-oidc')
 
         const trigger = page.locator('[data-dsh-oidc-account] button[aria-haspopup="menu"]')
         await trigger.waitFor({ state: 'visible', timeout: 30_000 })
@@ -1145,7 +1145,7 @@ describe(
       expect((await directDsh('/auth/check', nativeCookieHeader)).status).toBe(401)
       // The Plugins page's row toggle writes exactly this override.
       const replacement = `${profilePatch}.next`
-      writeFileSync(replacement, '- id: lumysia-oidc\n  disabled: true\n', { mode: 0o600 })
+      writeFileSync(replacement, '- id: soffits-oidc\n  disabled: true\n', { mode: 0o600 })
       renameSync(replacement, profilePatch)
       const deadline = Date.now() + 15_000
       let status = 401

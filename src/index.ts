@@ -14,7 +14,7 @@ export { authorizeClaims, type Principal } from './policy.js'
 export { resolveConfig } from './config.js'
 export { ENVIRONMENT_FIELDS, applyEnvironment, readEnvironment } from './env.js'
 export { REQUIRED_SEAMS, RuntimeCompatibilityError } from './compatibility.js'
-export const name = 'lumysia-oidc'
+export const name = 'soffits-oidc'
 export const inject = ['webServer', 'connection', 'credentials']
 
 /** Same-origin profile read for the sidebar account button; guarded by the proxy like the app. */

@@ -1,4 +1,4 @@
-# @lumysia/dsh-oidc bundle layer. Turning the bundle on adds the OIDC row;
+# @soffits/dsh-oidc bundle layer. Turning the bundle on adds the OIDC row;
 # turning it off removes it, which also removes /auth/check, so a proxy that
 # guards DSH with forward_auth /auth/check denies every request (fail closed).
 #
@@ -17,6 +17,6 @@
     publicUrl: !!js ctx.webStartup.publicUrl
     surfaceContext: true
 - insert:
-    - id: lumysia-oidc
-      name: '@lumysia/dsh-oidc'
+    - id: soffits-oidc
+      name: '@soffits/dsh-oidc'
       inject: [webServer, connection, credentials]

@@ -5,16 +5,16 @@
  * matches the launcher it replaces: the same sidebar row tokens, 44px signed-in
  * row, 24px avatar, 36px collapsed rail button and hover fill.
  */
-export const STYLE_ID = 'lumysia-dsh-oidc-account'
+export const STYLE_ID = 'soffits-dsh-oidc-account'
 
 export const CLASS = {
-  root: 'lumysia-oidc-account',
-  anchor: 'lumysia-oidc-account-anchor',
-  trigger: 'lumysia-oidc-account-trigger',
-  avatar: 'lumysia-oidc-account-avatar',
-  image: 'lumysia-oidc-account-image',
-  initials: 'lumysia-oidc-account-initials',
-  label: 'lumysia-oidc-account-label',
+  root: 'soffits-oidc-account',
+  anchor: 'soffits-oidc-account-anchor',
+  trigger: 'soffits-oidc-account-trigger',
+  avatar: 'soffits-oidc-account-avatar',
+  image: 'soffits-oidc-account-image',
+  initials: 'soffits-oidc-account-initials',
+  label: 'soffits-oidc-account-label',
 } as const
 
 export const CSS = `
@@ -43,7 +43,7 @@ export function installStyles(doc: Document = document): () => void {
   if (doc.getElementById(STYLE_ID) !== null) return () => undefined
   const tag = doc.createElement('style')
   tag.id = STYLE_ID
-  tag.dataset.plugin = '@lumysia/dsh-oidc'
+  tag.dataset.plugin = '@soffits/dsh-oidc'
   tag.textContent = CSS
   doc.head.appendChild(tag)
   return () => {

@@ -99,7 +99,7 @@ describe('styles and locales', () => {
   })
 
   it('has the same keys in English and Chinese', () => {
-    expect(NS).toBe('lumysia-oidc')
+    expect(NS).toBe('soffits-oidc')
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
   })
 })
@@ -135,7 +135,7 @@ describe('client plugin', () => {
     }
     expect(inject).toEqual(['slots', 'locale'])
     apply(ctx as never)
-    expect(dictionaries).toEqual(['lumysia-oidc:en', 'lumysia-oidc:zh'])
+    expect(dictionaries).toEqual(['soffits-oidc:en', 'soffits-oidc:zh'])
     expect(registrations).toHaveLength(1)
     const [registration] = registrations
     expect(registration?.options).toMatchObject({
