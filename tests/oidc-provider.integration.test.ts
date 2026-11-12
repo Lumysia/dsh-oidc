@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { once } from 'node:events'
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { resolveConfig } from '../src/config.js'
 import { OpenIdClientProtocol, OidcValidationError, validateAuthorizedParty } from '../src/oidc.js'
 
@@ -19,6 +19,7 @@ interface CodeGrant {
 class MockOidcProvider {
   readonly codes = new Map<string, CodeGrant>()
   discoveryMode: 'valid' | 'malformed' | 'wrong-issuer' | 'redirect' | 'timeout' = 'valid'
+  discoveryRequests = 0
   private key!: CryptoKey
   private jwk!: JWK
   private server!: Server
@@ -91,6 +92,7 @@ class MockOidcProvider {
     res: import('node:http').ServerResponse,
   ): Promise<void> {
     if (req.url === '/.well-known/openid-configuration') {
+      this.discoveryRequests += 1
       if (this.discoveryMode === 'malformed') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end('{')
@@ -186,7 +188,11 @@ afterAll(async () => {
   else process.env.NODE_TLS_REJECT_UNAUTHORIZED = priorTls
 })
 
-function protocol(timeout = 10, maxAuthenticationAgeSeconds?: number): OpenIdClientProtocol {
+function protocol(
+  timeout = 10,
+  maxAuthenticationAgeSeconds?: number,
+  cache?: { clock: () => number },
+): OpenIdClientProtocol {
   return new OpenIdClientProtocol(
     resolveConfig({
       issuer: provider.issuer,
@@ -197,6 +203,8 @@ function protocol(timeout = 10, maxAuthenticationAgeSeconds?: number): OpenIdCli
       ...(maxAuthenticationAgeSeconds === undefined ? {} : { maxAuthenticationAgeSeconds }),
     }),
     timeout,
+    { freshSeconds: 60, staleSeconds: 600 },
+    cache?.clock,
   )
 }
 
@@ -392,6 +400,93 @@ describe('openid-client protocol integration', () => {
     provider.codes.get('rotated')!.claims = { nonce: flow.started.nonce }
     await expect(flow.client.callback('secret', flow.checks)).resolves.toMatchObject({
       sub: 'allowed',
+    })
+  })
+
+  describe('discovery cache', () => {
+    let clockMs = 1_000_000
+    const clock = () => clockMs
+    const login = async (client: OpenIdClientProtocol, code: string) => {
+      const flow = await prepared(code, undefined, false, client)
+      provider.codes.get(code)!.claims = { nonce: flow.started.nonce }
+      return client.callback('secret', flow.checks)
+    }
+
+    it('reuses discovery within the fresh window and rediscovers after it', async () => {
+      const client = protocol(10, undefined, { clock })
+      const before = provider.discoveryRequests
+      await login(client, 'cache-1')
+      await login(client, 'cache-2')
+      expect(provider.discoveryRequests - before).toBe(1)
+      clockMs += 61_000
+      await login(client, 'cache-3')
+      expect(provider.discoveryRequests - before).toBe(2)
+    })
+
+    it('rediscovers when the client secret changes', async () => {
+      const client = protocol(10, undefined, { clock })
+      const before = provider.discoveryRequests
+      await client.start('secret')
+      await client.start('rotated-secret')
+      expect(provider.discoveryRequests - before).toBe(2)
+    })
+
+    it.each(['malformed', 'redirect', 'wrong-issuer'] as const)(
+      'keeps signing in on the last good discovery when rediscovery is %s',
+      async (mode) => {
+        const client = protocol(10, undefined, { clock })
+        await client.start('secret')
+        clockMs += 120_000
+        provider.discoveryMode = mode
+        try {
+          await expect(login(client, `stale-${mode}`)).resolves.toMatchObject({ sub: 'allowed' })
+        } finally {
+          provider.discoveryMode = 'valid'
+        }
+      },
+    )
+
+    it('fails closed once the last good discovery is older than the stale window', async () => {
+      const client = protocol(10, undefined, { clock })
+      await client.start('secret')
+      clockMs += 601_000
+      provider.discoveryMode = 'malformed'
+      try {
+        expect(await rejectionText(client.start('secret'))).toContain('OIDC_DISCOVERY_INVALID')
+      } finally {
+        provider.discoveryMode = 'valid'
+      }
+    })
+
+    it('does not trust a cache entry from the future', async () => {
+      const client = protocol(10, undefined, { clock })
+      await client.start('secret')
+      clockMs -= 5_000
+      provider.discoveryMode = 'malformed'
+      try {
+        expect(await rejectionText(client.start('secret'))).toContain('OIDC_DISCOVERY_INVALID')
+      } finally {
+        provider.discoveryMode = 'valid'
+        clockMs += 5_000
+      }
+    })
+
+    it('accepts provider signing-key rotation with a cached discovery', async () => {
+      // openid-client refetches the cached JWKS on an unknown kid once that copy is
+      // at least 60 s old; a key rotated sooner than that after the last fetch is
+      // rejected until then.
+      const client = protocol(10, undefined, { clock })
+      await login(client, 'cached-before-rotation')
+      await provider.rotate()
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        vi.setSystemTime(Date.now() + 61_000)
+        await expect(login(client, 'cached-after-rotation')).resolves.toMatchObject({
+          sub: 'allowed',
+        })
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

@@ -101,14 +101,63 @@ function findValidationError(error: unknown): OidcValidationError | undefined {
   return undefined
 }
 
+/** How long a discovered provider configuration (metadata plus its JWKS cache) is reused. */
+export interface DiscoveryCachePolicy {
+  /** Reuse without asking the provider again for this long. */
+  readonly freshSeconds: number
+  /** When rediscovery fails, keep using the last good configuration up to this age. */
+  readonly staleSeconds: number
+}
+
+export const DEFAULT_DISCOVERY_CACHE: DiscoveryCachePolicy = {
+  freshSeconds: 60 * 60,
+  staleSeconds: 24 * 60 * 60,
+}
+
+interface CachedDiscovery {
+  readonly clientSecret: string | undefined
+  readonly configuration: oidc.Configuration
+  readonly fetchedAt: number
+}
+
 /** Standards implementation backed by openid-client discovery, JWKS, and token validation. */
 export class OpenIdClientProtocol implements OidcProtocol {
+  private cached: CachedDiscovery | undefined
+
   constructor(
     private readonly config: ResolvedConfig,
     private readonly requestTimeoutSeconds = 10,
+    private readonly cachePolicy: DiscoveryCachePolicy = DEFAULT_DISCOVERY_CACHE,
+    private readonly now: () => number = Date.now,
   ) {}
 
+  /**
+   * Discovery is reused for `freshSeconds`, so logins don't refetch metadata and
+   * the JWKS each time. A failed rediscovery falls back to the last configuration
+   * that passed validation, up to `staleSeconds`, so a provider hiccup doesn't
+   * block sign-in; with no usable copy it fails closed as before. The cache is
+   * keyed on the client secret, so a rotated secret rediscovers.
+   */
   private async discover(clientSecret: string | undefined): Promise<oidc.Configuration> {
+    const now = this.now()
+    const cached = this.cached?.clientSecret === clientSecret ? this.cached : undefined
+    const age = cached === undefined ? Infinity : now - cached.fetchedAt
+    if (cached !== undefined && age >= 0 && age < this.cachePolicy.freshSeconds * 1000) {
+      return cached.configuration
+    }
+    try {
+      const configuration = await this.fetchConfiguration(clientSecret)
+      this.cached = { clientSecret, configuration, fetchedAt: now }
+      return configuration
+    } catch (error) {
+      if (cached !== undefined && age >= 0 && age < this.cachePolicy.staleSeconds * 1000) {
+        return cached.configuration
+      }
+      throw error
+    }
+  }
+
+  private async fetchConfiguration(clientSecret: string | undefined): Promise<oidc.Configuration> {
     const metadata: Partial<oidc.ClientMetadata> = {
       redirect_uris: [this.config.redirectUri],
       response_types: ['code'],

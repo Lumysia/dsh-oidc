@@ -81,7 +81,7 @@ See the [deployment guide](docs/deployment.md), the bundle layer [`cordis.patch.
 
 ## Protocol behavior
 
-- OpenID Connect discovery over HTTPS with redirects rejected and a bounded request timeout.
+- OpenID Connect discovery over HTTPS with redirects rejected and a bounded request timeout. A validated discovery result (with its JWKS cache) is reused for an hour; if rediscovery then fails, the last validated result keeps being used for up to 24 hours, and after that sign-in fails closed. Restart DSH to drop it sooner.
 - Authorization Code only, PKCE S256, independent random state/nonce/verifier/transaction/session/CSRF values.
 - One-use five-minute transaction with a bound `Secure; HttpOnly; SameSite=Lax; Path=/` cookie.
 - ID-token signature, issuer, audience, expiry, nonce, and optional `auth_time` validation by `openid-client`/`oauth4webapi`, followed by an exact `azp === clientId` check whenever `azp` exists and a mandatory `azp` for multi-valued audiences.
