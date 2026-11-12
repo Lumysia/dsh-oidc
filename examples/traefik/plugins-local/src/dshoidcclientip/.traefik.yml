@@ -1,0 +1,5 @@
+displayName: dsh-oidc client IP
+type: middleware
+import: dshoidcclientip
+summary: Sets X-Dsh-Oidc-Client-Ip from the TCP peer address.
+testData: {}
