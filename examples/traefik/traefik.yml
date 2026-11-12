@@ -1,0 +1,56 @@
+# Traefik v3 static configuration for DSH behind dsh-oidc. Tested with
+# Traefik 3.7.18. aliasHeadersStrategy needs 3.7.12 or newer (remove those
+# lines on older versions) and forwardAuth's preserveLocationHeader needs 3.3.
+# Routes and middlewares are in dynamic.yml.
+
+entryPoints:
+  # Illustrative HTTPS-only host: there is no entry point on port 80 on
+  # purpose. Use DNS-01 or operator-managed certificates, and block TCP/80
+  # for this address at the network edge.
+  websecure:
+    address: ':443'
+    http:
+      # Drop headers such as X_Forwarded_User that alias a stripped name.
+      aliasHeadersStrategy: delete
+    # The plugin's login rate limit uses the TCP peer address. If a load
+    # balancer sits in front of Traefik, every client shares its address
+    # unless it speaks the PROXY protocol to this entry point, for example:
+    # proxyProtocol:
+    #   trustedIPs: ['10.0.0.5']
+
+  # forwardAuth sends its request with the Host of its own address, and
+  # /auth/check answers only the public host. The check therefore goes
+  # through this loopback-only entry point, where a router puts the public
+  # Host back before the request reaches DSH. Nothing outside the Traefik
+  # container or host can reach it.
+  #
+  # Routers that list no entryPoints attach to every entry point, this one
+  # included. Give your other routers explicit entryPoints, or set
+  # `asDefault: true` on your public entry points.
+  dsh-oidc-check:
+    address: '127.0.0.1:9180'
+    http:
+      aliasHeadersStrategy: delete
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+
+experimental:
+  # Traefik cannot set a header from the client's connection address with
+  # its own middlewares, so a 20-line local plugin does it (see
+  # plugins-local/). Traefik loads local plugins from ./plugins-local relative
+  # to its working directory; in the official image that is /plugins-local,
+  # so mount this directory's plugins-local there.
+  localPlugins:
+    dshOidcClientIp:
+      moduleName: dshoidcclientip
+
+# DSH's temporary native bootstrap URL carries a bearer token in its query.
+# Traefik's access log cannot drop only the query, so drop the whole request
+# path. Header logging is off by default; keep it off.
+accessLog:
+  format: json
+  fields:
+    names:
+      RequestPath: drop

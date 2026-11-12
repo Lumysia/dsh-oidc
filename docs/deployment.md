@@ -4,7 +4,7 @@ This guide installs the plugin as a DSH bundle, either from a GitHub release tar
 
 ## Prerequisites and topology
 
-- Node 24.9 or newer, a DSH release in the plugin's supported range (see the README) with its shipped `web` profile, `pnpm` on `PATH` (DSH's plugin manager calls it), Caddy v2, a TLS certificate, and an OIDC issuer with authorization-code + PKCE S256 support.
+- Node 24.9 or newer, a DSH release in the plugin's supported range (see the README) with its shipped `web` profile, `pnpm` on `PATH` (DSH's plugin manager calls it), a reverse proxy (Caddy v2, nginx 1.25.1 or newer, or Traefik v3; see [nginx and Traefik](#nginx-and-traefik)), a TLS certificate, and an OIDC issuer with authorization-code + PKCE S256 support.
 - One DSH process/home behind the reverse proxy, reachable only by that proxy. The application shares **one operator authority** among all admitted identities; use one process/home per identity if isolation is needed.
 - An HTTPS public origin with no HTTP path on which a browser could send DSH's native cookie. The Caddy example disables automatic redirects, but an HTTPS site declaration **does not close TCP/80**. Use an isolated IP/edge firewall or equivalent network boundary, and DNS-01 or operator-managed TLS certificates that do not need HTTP-01. Verify from outside the host that TCP/80 for that address is unavailable. When an IP is shared with HTTP sites, do **not** call it strictly HTTPS-only. The example's `Set-Cookie` rewrite protects newly minted native cookies, not cookies already stored without `Secure`.
 - The public hostname must be the exact fixed `publicOrigin` and a DSH `--trusted-host` authority.
@@ -13,7 +13,7 @@ This guide installs the plugin as a DSH bundle, either from a GitHub release tar
 
 With Caddy and DSH on one host, bind DSH to `127.0.0.1` and keep the default `trustedProxies` (loopback).
 
-When Caddy runs in another container, DSH has to listen on its container address (DSH rejects wildcard binds such as `0.0.0.0`; pass the concrete address, for example from `hostname -i`). Put the two containers on a private network that nothing else joins, publish no DSH port to the host, and set `trustedProxies` to Caddy's address or that network, for example `DSH_OIDC_TRUSTED_PROXIES='["172.18.0.0/16"]'`. Without it `/auth/login` answers 403, because the client-address header from a non-trusted peer is ignored. Point the Caddyfile's `127.0.0.1:3080` upstreams at the DSH container name and port.
+When Caddy runs in another container, DSH has to listen on its container address (DSH rejects wildcard binds such as `0.0.0.0`; pass the concrete address, for example from `hostname -i`). Put the two containers on a private network that nothing else joins, publish no DSH port to the host, and set `trustedProxies` to Caddy's address or that network, for example `DSH_OIDC_TRUSTED_PROXIES='["172.18.0.0/16"]'`. Without it `/auth/login` answers 403, because the client-address header from a non-trusted peer is ignored. Point the Caddyfile's `127.0.0.1:3080` upstreams at the DSH container name and port. The same applies to the nginx and Traefik examples.
 
 ## Install into a profile
 
@@ -75,6 +75,13 @@ Adapt and validate [`examples/Caddyfile`](../examples/Caddyfile) against your Ca
 - makes newly issued `dsh-auth-*` cookies `Secure`, including deletion and already-Secure cases, and redacts URL queries from access logs.
 
 Keep a backup of the prior proxy configuration. Do not turn on public routing until DSH and the provider are ready. With no browser cookies, check `/` and `/api` return 401 to API clients, `/auth/not-registered` returns 404, and `HEAD /auth/login` returns 204 (a 403 here usually means `trustedProxies` does not include the proxy). A browser navigation to any protected path is redirected to `/auth/signin`. Sign in in a real browser, then verify the clean DSH root, an API/workspace read and write, a native `dsh-auth-*` browser cookie marked **Secure**, and a working `/api/remote.mux` WebSocket (no persistent "Reconnecting"). Finally use the logout confirmation and POST, then check a stale native cookie cannot reach protected paths.
+
+### nginx and Traefik
+
+[`examples/nginx.conf`](../examples/nginx.conf) and [`examples/traefik/`](../examples/traefik/) follow the same rules as the Caddyfile and need the same checks. They were tested by hand against a stub DSH with nginx 1.30.6 and Traefik 3.7.18; CI runs only the Caddy example.
+
+- nginx: `auth_request` admits only a 2xx from `/auth/check`. It passes 401 and 403 through and turns every other answer into a 500, including an unreachable DSH and the 404 of a disabled plugin; the example turns the sign-in 303 back into a redirect. nginx drops inherited `proxy_set_header` lines in any location that sets one, so the check subrequest repeats the header list (with `Upgrade`, `Connection` and `Content-Length` cleared); keep the two lists the same. The error log records the full request line, query included, so keep it private.
+- Traefik: forwardAuth sends the check with the Host of its own address, and `/auth/check` answers only the public host, so the check goes through a loopback-only entry point where a router sets `Host` back. Traefik's middlewares cannot set a header from the connection address, so a small local plugin in `examples/traefik/plugins-local/` sets `X-Dsh-Oidc-Client-Ip`; without it `/auth/login` answers 403. Traefik cannot rewrite `Set-Cookie`, so the native `dsh-auth-*` cookie is issued without `Secure` and a browser would send it over plain HTTP if TCP/80 at that address were reachable: keep the host strictly HTTPS-only. Its access log cannot drop only the query, so the example drops the request path.
 
 ## Rollback and limitations
 

@@ -36,6 +36,12 @@ const expectedFiles = [
   'locale/en.json',
   'locale/zh.json',
   'examples/Caddyfile',
+  'examples/nginx.conf',
+  'examples/traefik/dynamic.yml',
+  'examples/traefik/plugins-local/src/dshoidcclientip/.traefik.yml',
+  'examples/traefik/plugins-local/src/dshoidcclientip/clientip.go',
+  'examples/traefik/plugins-local/src/dshoidcclientip/go.mod',
+  'examples/traefik/traefik.yml',
   'package.json',
 ]
 

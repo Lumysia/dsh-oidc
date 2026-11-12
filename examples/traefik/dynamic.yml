@@ -1,0 +1,87 @@
+# Traefik v3 dynamic configuration (file provider) for DSH behind dsh-oidc,
+# with the same routing as examples/Caddyfile. See traefik.yml for the entry
+# points and the local plugin it relies on.
+#
+# Traefik differs from the Caddy and nginx examples in one way: it cannot
+# rewrite Set-Cookie, so DSH's native dsh-auth-* cookie is issued without
+# Secure. Keep the host strictly HTTPS-only (no TCP/80 at this address).
+
+http:
+  routers:
+    # Only the five registered OIDC endpoints bypass admission.
+    dsh-oidc-endpoints:
+      entryPoints: [websecure]
+      rule: >-
+        Host(`dsh.example`) && (Path(`/auth/login`) || Path(`/auth/callback`) ||
+        Path(`/auth/check`) || Path(`/auth/signin`) || Path(`/auth/logout`))
+      middlewares: [dsh-oidc-strip, dsh-oidc-client-ip]
+      service: dsh
+      tls: {} # your certResolver or certificates
+
+    # Everything else on the host (root, assets, /api, uploads, SSE,
+    # WebSocket upgrades, /_dsh-oidc/session) needs a passing /auth/check.
+    # Other /auth/ paths match no router, so Traefik answers 404 and a future
+    # DSH route under /auth/ does not inherit the exception.
+    dsh:
+      entryPoints: [websecure]
+      rule: Host(`dsh.example`) && !PathPrefix(`/auth/`)
+      middlewares: [dsh-oidc-strip, dsh-oidc-check]
+      service: dsh
+      tls: {}
+
+    # The loopback hop forwardAuth calls (see traefik.yml).
+    dsh-oidc-check-hop:
+      entryPoints: [dsh-oidc-check]
+      rule: Path(`/auth/check`)
+      middlewares: [dsh-oidc-public-host]
+      service: dsh
+
+  middlewares:
+    # Strip browser-supplied credentials, proxy credentials, the dedicated
+    # client address and common identity aliases. An empty value removes the
+    # header. Runs before forwardAuth, so the check does not see them either.
+    dsh-oidc-strip:
+      headers:
+        customRequestHeaders:
+          Authorization: ''
+          Proxy-Authorization: ''
+          X-Dsh-Oidc-Client-Ip: ''
+          X-Forwarded-User: ''
+          X-Forwarded-Email: ''
+          X-Auth-Request-User: ''
+          X-Auth-Request-Email: ''
+          X-Remote-User: ''
+          Remote-User: ''
+        stsSeconds: 31536000
+
+    # Sets X-Dsh-Oidc-Client-Ip from the TCP peer for the OIDC endpoints.
+    dsh-oidc-client-ip:
+      plugin:
+        dshOidcClientIp: {}
+
+    # forwardAuth sends a GET without the body and without Connection and
+    # Upgrade, so a WebSocket request is checked as a plain GET; the upgrade
+    # itself still reaches DSH once the check passes. Any answer outside 2xx
+    # is returned to the client, so a 401, the 303 to the sign-in page, a 404
+    # from a disabled plugin and a 5xx all deny; an unreachable DSH gives 502.
+    dsh-oidc-check:
+      forwardAuth:
+        address: http://127.0.0.1:9180/auth/check
+        trustForwardHeader: false
+        # Keep the sign-in redirect relative instead of resolving it against
+        # the address above.
+        preserveLocationHeader: true
+        maxResponseBodySize: 65536
+
+    dsh-oidc-public-host:
+      headers:
+        customRequestHeaders:
+          Host: dsh.example
+
+  services:
+    # If DSH runs in another container, point this at it and set the
+    # plugin's trustedProxies to Traefik's address or network.
+    dsh:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:3080

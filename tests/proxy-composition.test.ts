@@ -2,6 +2,15 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const caddy = readFileSync(new URL('../examples/Caddyfile', import.meta.url), 'utf8')
+const nginx = readFileSync(new URL('../examples/nginx.conf', import.meta.url), 'utf8')
+const traefikStatic = readFileSync(
+  new URL('../examples/traefik/traefik.yml', import.meta.url),
+  'utf8',
+)
+const traefikDynamic = readFileSync(
+  new URL('../examples/traefik/dynamic.yml', import.meta.url),
+  'utf8',
+)
 const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
   dsh: { bundle: { patch: string }; client: { platform: string } }
@@ -74,6 +83,81 @@ describe('proxy and composition security examples', () => {
     expect(caddy).toContain('dsh-auth-')
     expect(caddy).not.toMatch(/http:\/\/dsh\.example/u)
     expect(readme).toContain('do not expose HTTP port 80')
+  })
+
+  it('keeps the nginx example on the same routing, header and logging rules', () => {
+    const stripped = [
+      'Authorization',
+      'Proxy-Authorization',
+      'X-Forwarded-User',
+      'X-Forwarded-Email',
+      'X-Auth-Request-User',
+      'X-Auth-Request-Email',
+      'X-Remote-User',
+      'Remote-User',
+    ]
+    for (const path of ['login', 'callback', 'check', 'signin', 'logout'])
+      expect(nginx).toMatch(
+        new RegExp(
+          `location = /auth/${path} +\\{ proxy_pass http://dsh_oidc/auth/${path}; \\}`,
+          'u',
+        ),
+      )
+    expect(nginx).toMatch(/location \/auth\/ \{\s+return 404;/u)
+    const checkAt = nginx.indexOf('location = /_dsh_oidc_check {')
+    const appAt = nginx.indexOf('location / {', checkAt)
+    const check = nginx.slice(checkAt, appAt)
+    const server = nginx.slice(nginx.indexOf('server_name dsh.example;'), checkAt)
+    expect(check).toContain('internal;')
+    expect(check).toContain('proxy_pass_request_body off;')
+    for (const block of [server, check]) {
+      expect(block).toMatch(/proxy_set_header Host +\$host;/u)
+      expect(block).toMatch(/proxy_set_header X-Dsh-Oidc-Client-Ip \$remote_addr;/u)
+      for (const name of stripped)
+        expect(block).toMatch(new RegExp(`proxy_set_header ${name} +"";`, 'u'))
+    }
+    for (const name of ['Upgrade', 'Connection', 'Content-Length'])
+      expect(check).toMatch(new RegExp(`proxy_set_header ${name} +"";`, 'u'))
+    expect(server).toMatch(/proxy_set_header Upgrade +\$http_upgrade;/u)
+    const app = nginx.slice(appAt)
+    expect(app).toContain('auth_request /_dsh_oidc_check;')
+    expect(app).not.toContain('proxy_set_header')
+    expect(nginx).toContain('proxy_cookie_flags ~^dsh-auth- secure;')
+    const logFormatAt = nginx.indexOf('log_format dsh_oidc ')
+    const logFormat = nginx.slice(logFormatAt, nginx.indexOf(';', logFormatAt))
+    expect(logFormatAt).toBeGreaterThan(0)
+    expect(logFormat).toContain('$uri')
+    expect(nginx).toContain('access_log /var/log/nginx/dsh.access.log dsh_oidc;')
+    expect(logFormat).not.toMatch(/\$request(?:_uri)?\b|\$args|\$query_string/u)
+    expect(nginx).toMatch(/^\s+listen 443 ssl;$/mu)
+    expect(nginx).not.toMatch(/^\s*listen\s+(?:\S+:)?80\b/mu)
+  })
+
+  it('keeps the Traefik example on the same routing and header rules', () => {
+    expect(traefikDynamic).toContain(
+      'Path(`/auth/login`) || Path(`/auth/callback`) ||\n        Path(`/auth/check`) || Path(`/auth/signin`) || Path(`/auth/logout`))',
+    )
+    expect(traefikDynamic).toContain('rule: Host(`dsh.example`) && !PathPrefix(`/auth/`)')
+    expect(traefikDynamic).toContain('middlewares: [dsh-oidc-strip, dsh-oidc-check]')
+    expect(traefikDynamic).toContain('middlewares: [dsh-oidc-strip, dsh-oidc-client-ip]')
+    for (const name of [
+      'Authorization',
+      'Proxy-Authorization',
+      'X-Dsh-Oidc-Client-Ip',
+      'X-Forwarded-User',
+      'X-Forwarded-Email',
+      'X-Auth-Request-User',
+      'X-Auth-Request-Email',
+      'X-Remote-User',
+      'Remote-User',
+    ])
+      expect(traefikDynamic).toContain(`          ${name}: ''`)
+    expect(traefikDynamic).toContain('address: http://127.0.0.1:9180/auth/check')
+    expect(traefikDynamic).toContain('preserveLocationHeader: true')
+    expect(traefikDynamic).toContain('Host: dsh.example')
+    expect(traefikStatic).toContain("address: '127.0.0.1:9180'")
+    expect(traefikStatic).toContain('RequestPath: drop')
+    expect(traefikStatic).not.toMatch(/address: '?:80'?/u)
   })
 
   it('states shared-operator behavior and stale-cookie denial', () => {
