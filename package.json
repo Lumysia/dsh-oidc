@@ -1,6 +1,6 @@
 {
   "name": "@soffits/dsh-oidc",
-  "version": "0.3.0-alpha.3",
+  "version": "0.3.0-alpha.4",
   "description": "Provider-neutral OpenID Connect admission for DeepSeek Harness Web",
   "type": "module",
   "license": "MIT",
