@@ -19,6 +19,7 @@ export const ENVIRONMENT_FIELDS = {
   DSH_OIDC_DIRECT_LOGIN: 'directLogin',
   DSH_OIDC_ALLOW_ANY_USER: 'allowAnyUser',
   DSH_OIDC_SENDER_CONTEXT: 'senderContext',
+  DSH_OIDC_PERSIST_SESSIONS: 'persistSessions',
 } as const satisfies Record<string, keyof Config>
 
 export type EnvironmentVariable = keyof typeof ENVIRONMENT_FIELDS
@@ -117,6 +118,8 @@ export function readEnvironment(
   if (anyUser !== undefined) values.allowAnyUser = boolean('DSH_OIDC_ALLOW_ANY_USER', anyUser)
   const sender = read('DSH_OIDC_SENDER_CONTEXT')
   if (sender !== undefined) values.senderContext = boolean('DSH_OIDC_SENDER_CONTEXT', sender)
+  const persist = read('DSH_OIDC_PERSIST_SESSIONS')
+  if (persist !== undefined) values.persistSessions = boolean('DSH_OIDC_PERSIST_SESSIONS', persist)
   const fields = (Object.values(ENVIRONMENT_FIELDS) as EnvironmentField[]).filter(
     (field) => values[field] !== undefined,
   )

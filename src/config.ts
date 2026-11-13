@@ -28,6 +28,7 @@ export interface Config {
   directLogin?: boolean
   allowAnyUser?: boolean
   senderContext?: boolean
+  persistSessions?: boolean
 }
 
 /** Loopback only: a proxy on the same host. */
@@ -73,6 +74,7 @@ export const Config: z<Config> = z.object({
   directLogin: z.boolean().default(false),
   allowAnyUser: z.boolean().default(false),
   senderContext: z.boolean().default(false),
+  persistSessions: z.boolean().default(false),
 })
 
 export interface AuthorizationPolicy {
@@ -109,6 +111,8 @@ export interface ResolvedConfig {
   readonly directLogin: boolean
   /** Put a line naming the signed-in sender in front of each Web prompt the model reads. */
   readonly senderContext: boolean
+  /** Keep sessions in DSH's storage so a restart does not sign everyone out. */
+  readonly persistSessions: boolean
 }
 
 /** Matches socket peer addresses against the configured proxy addresses and CIDR ranges. */
@@ -293,5 +297,6 @@ export function resolveConfig(config: Config): ResolvedConfig {
     trustedProxies: trustedProxies(config.trustedProxies ?? DEFAULT_TRUSTED_PROXIES),
     directLogin: config.directLogin ?? false,
     senderContext: config.senderContext ?? false,
+    persistSessions: config.persistSessions ?? false,
   }
 }

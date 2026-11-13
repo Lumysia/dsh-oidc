@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add `persistSessions` (`DSH_OIDC_PERSIST_SESSIONS`), off by default: sessions are also kept in DSH's storage (`storages/dsh_oidc_sessions.json`, mode 0600, keyed by the SHA-256 of the cookie value), so a DSH restart no longer signs everyone out. Restored sessions keep the configured absolute and idle limits, logout deletes the record before answering, and a changed issuer, client or allow policy drops every stored session.
+
 ## 0.3.0-alpha.4
 
 - Add `senderContext` (`DSH_OIDC_SENDER_CONTEXT`), off by default: each Web prompt reaches the model after a `[Web message from <name> (oidc sub <sub>)]` notice taken from the verified OIDC session of the `/api` request that admitted it. Other channels, scheduled jobs and agent-to-agent messages get none.

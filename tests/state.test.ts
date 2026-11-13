@@ -24,7 +24,7 @@ describe('bounded one-use state', () => {
     expect(store.consume('bad', 'bad', 1)).toBeUndefined()
   })
 
-  it('expires, idles, tampers, deletes, and bounds opaque sessions', () => {
+  it('expires, idles, tampers, deletes, and bounds opaque sessions', async () => {
     const sessions = new BrowserSessions(1000, 100, 1)
     const session = sessions.create(principal, 100)
     expect(session?.value).toMatch(/^[A-Za-z0-9_-]{43}$/u)
@@ -34,7 +34,7 @@ describe('bounded one-use state', () => {
     expect(sessions.read(`${session?.value}x`, 151)).toBeUndefined()
     expect(sessions.read(session?.value, 251)).toBeUndefined()
     const next = sessions.create(principal, 300)
-    sessions.delete(next?.value)
+    await sessions.delete(next?.value)
     expect(sessions.read(next?.value, 301)).toBeUndefined()
   })
 
