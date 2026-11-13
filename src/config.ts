@@ -27,6 +27,7 @@ export interface Config {
   trustedProxies?: string[]
   directLogin?: boolean
   allowAnyUser?: boolean
+  senderContext?: boolean
 }
 
 /** Loopback only: a proxy on the same host. */
@@ -71,6 +72,7 @@ export const Config: z<Config> = z.object({
   trustedProxies: z.array(String).default([...DEFAULT_TRUSTED_PROXIES]),
   directLogin: z.boolean().default(false),
   allowAnyUser: z.boolean().default(false),
+  senderContext: z.boolean().default(false),
 })
 
 export interface AuthorizationPolicy {
@@ -105,6 +107,8 @@ export interface ResolvedConfig {
   readonly trustedProxies: TrustedProxies
   /** Send signed-out browser navigations straight to the provider instead of the bundled sign-in page. */
   readonly directLogin: boolean
+  /** Put a line naming the signed-in sender in front of each Web prompt the model reads. */
+  readonly senderContext: boolean
 }
 
 /** Matches socket peer addresses against the configured proxy addresses and CIDR ranges. */
@@ -288,5 +292,6 @@ export function resolveConfig(config: Config): ResolvedConfig {
     loginRateLimitPerMinute: config.loginRateLimitPerMinute ?? 20,
     trustedProxies: trustedProxies(config.trustedProxies ?? DEFAULT_TRUSTED_PROXIES),
     directLogin: config.directLogin ?? false,
+    senderContext: config.senderContext ?? false,
   }
 }

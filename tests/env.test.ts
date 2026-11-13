@@ -90,6 +90,16 @@ describe('DSH_OIDC_* environment precedence', () => {
     expect(() => readEnvironment({ DSH_OIDC_ALLOW_ANY_USER: 'yes' }, {})).toThrow(/true or false/u)
   })
 
+  it('reads DSH_OIDC_SENDER_CONTEXT as a strict boolean and leaves the sender line off by default', () => {
+    const layer = readEnvironment({ ...env, DSH_OIDC_SENDER_CONTEXT: 'true' }, row)
+    expect(layer.fields).toContain('senderContext')
+    expect(resolveConfig(applyEnvironment(row, layer)).senderContext).toBe(true)
+    expect(resolveConfig(applyEnvironment(row, readEnvironment(env, row))).senderContext).toBe(
+      false,
+    )
+    expect(() => readEnvironment({ DSH_OIDC_SENDER_CONTEXT: '1' }, {})).toThrow(/true or false/u)
+  })
+
   it('needs an issuer for bare subjects', () => {
     expect(() => readEnvironment({ DSH_OIDC_ALLOWED_SUBJECTS: '["s"]' }, {})).toThrow(/issuer/u)
   })

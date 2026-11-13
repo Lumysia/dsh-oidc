@@ -384,6 +384,19 @@ describe('OIDC route admission', () => {
     )
     const session = cookieFrom(callback.captured.headers, SESSION_COOKIE)
 
+    // The sender context reads the same verified session, and nothing else.
+    expect(
+      admission.principalOf(request('POST', '/api/session/prompt', { cookie: session })),
+    ).toMatchObject({
+      issuer: 'https://id.example/issuer',
+      subject: 'allowed',
+      username: 'operator',
+    })
+    expect(admission.principalOf(request('POST', '/api/session/prompt'))).toBeUndefined()
+    expect(
+      harness().admission.principalOf(request('POST', '/api/x', { cookie: session })),
+    ).toBeUndefined()
+
     const anonymous = response()
     admission.session(request('GET', '/_dsh-oidc/session'), anonymous.value)
     expect(anonymous.captured).toMatchObject({ status: 401, body: 'unauthorized\n' })

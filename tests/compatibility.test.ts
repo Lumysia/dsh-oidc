@@ -146,6 +146,25 @@ describe('DSH host seam check', () => {
     expect(routes).toEqual([])
   })
 
+  it('listens for prompts only when senderContext is on', async () => {
+    const listened: string[] = []
+    const make = () =>
+      host({
+        logger: {},
+        effect: (factory: () => unknown) => factory(),
+        on: (name: string) => listened.push(name),
+      }) as unknown as Context
+    await apply(make(), config)
+    expect(listened).toEqual([])
+    await apply(make(), { ...config, senderContext: true })
+    expect(listened).toEqual([
+      'connection/request',
+      'agent/inbox/inserted',
+      'agent/inbox/discarded',
+      'agent/pre-step',
+    ])
+  })
+
   it('takes a bare bundle row from the environment and registers nothing when it is incomplete', async () => {
     const saved = { ...process.env }
     const routes: unknown[] = []

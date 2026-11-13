@@ -7,6 +7,7 @@ import { assertRuntimeCompatibility } from './compatibility.js'
 import { Config, resolveConfig, type Config as OidcConfig } from './config.js'
 import { applyEnvironment, readEnvironment } from './env.js'
 import { OpenIdClientProtocol } from './oidc.js'
+import { applySenderContext } from './sender.js'
 
 export { Config }
 export type { OidcConfig as ConfigType }
@@ -14,6 +15,7 @@ export { authorizeClaims, type Principal } from './policy.js'
 export { resolveConfig } from './config.js'
 export { ENVIRONMENT_FIELDS, applyEnvironment, readEnvironment } from './env.js'
 export { REQUIRED_SEAMS, RuntimeCompatibilityError } from './compatibility.js'
+export { SENDER_SOURCE_KIND, senderOf, senderTag } from './sender.js'
 export const name = 'soffits-oidc'
 export const inject = ['webServer', 'connection', 'credentials']
 
@@ -59,4 +61,5 @@ export async function apply(ctx: Context, rawConfig: OidcConfig | undefined): Pr
   ]
   for (const route of routes)
     ctx.effect(() => ctx.webServer.register(route), `dsh-oidc: ${route.path}`)
+  if (config.senderContext) applySenderContext(ctx, (req) => admission.principalOf(req))
 }
