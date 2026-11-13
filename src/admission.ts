@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import type { CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
 import type { ResolvedConfig, TrustedProxies } from './config.js'
 import type { OidcProtocol } from './oidc.js'
-import { authorizeClaims } from './policy.js'
+import { authorizeClaims, type Principal } from './policy.js'
 import {
   AuthorizationTransactions,
   BrowserSessions,
@@ -278,6 +278,14 @@ export class OidcAdmission {
     if (req.method === 'GET' && wantsNavigation(req))
       return redirect(res, this.config.directLogin ? '/auth/login?nav=1' : '/auth/signin')
     plain(res, 401, 'unauthorized\n', req.method === 'HEAD')
+  }
+
+  /**
+   * The verified principal of the request's live OIDC session, read from this
+   * plugin's own HttpOnly session cookie only; undefined without one.
+   */
+  principalOf(req: IncomingMessage): Principal | undefined {
+    return this.sessions.read(this.sessionValue(req))?.principal
   }
 
   /**

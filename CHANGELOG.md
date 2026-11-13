@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `senderContext` (`DSH_OIDC_SENDER_CONTEXT`), off by default: each Web prompt reaches the model after a `[Web message from <name> (oidc sub <sub>)]` notice taken from the verified OIDC session of the `/api` request that admitted it. Other channels, scheduled jobs and agent-to-agent messages get none.
 - Add nginx (`examples/nginx.conf`) and Traefik (`examples/traefik/`) proxy examples with the same routing and header rules as the Caddyfile. Traefik needs the included local plugin to set the client address header and cannot mark the native cookie `Secure`. Both were tested against a stub DSH; CI still runs only the Caddy example.
 - Cache provider discovery and its JWKS in memory: reused for an hour, and kept for up to 24 hours when rediscovery fails, so a provider hiccup no longer fails every login. Without a usable copy sign-in still fails closed.
 

@@ -28,6 +28,7 @@ const expectedFiles = [
   'dist/index.js.map',
   'dist/oidc.d.ts',
   'dist/policy.d.ts',
+  'dist/sender.d.ts',
   'dist/state.d.ts',
   'docs/deployment.md',
   'docs/interoperability.md',
