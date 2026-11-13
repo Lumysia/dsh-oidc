@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-alpha.4
 
 - Add `senderContext` (`DSH_OIDC_SENDER_CONTEXT`), off by default: each Web prompt reaches the model after a `[Web message from <name> (oidc sub <sub>)]` notice taken from the verified OIDC session of the `/api` request that admitted it. Other channels, scheduled jobs and agent-to-agent messages get none.
 - Add nginx (`examples/nginx.conf`) and Traefik (`examples/traefik/`) proxy examples with the same routing and header rules as the Caddyfile. Traefik needs the included local plugin to set the client address header and cannot mark the native cookie `Secure`. Both were tested against a stub DSH; CI still runs only the Caddy example.
