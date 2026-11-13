@@ -11,6 +11,7 @@ import {
   FixedWindowRateLimiter,
   SESSION_COOKIE,
   TRANSACTION_COOKIE,
+  type SessionPersistence,
   expiredCookie,
   readCookie,
   secureCookie,
@@ -152,6 +153,7 @@ export class OidcAdmission {
     private readonly connection: NativeConnectionLauncher,
     private readonly protocol: OidcProtocol,
     private readonly logger: AdmissionLogger,
+    persistence?: SessionPersistence,
   ) {
     this.transactions = new AuthorizationTransactions(
       config.transactionMaxAgeSeconds * 1000,
@@ -161,8 +163,14 @@ export class OidcAdmission {
       config.sessionMaxAgeSeconds * 1000,
       config.sessionIdleTimeoutSeconds * 1000,
       config.maxSessions,
+      persistence,
     )
     this.limiter = new FixedWindowRateLimiter(config.loginRateLimitPerMinute)
+  }
+
+  /** Load persisted sessions; a no-op without persistence. */
+  restoreSessions(now = Date.now()): Promise<number> {
+    return this.sessions.restore(now)
   }
 
   private correlation(): string {
@@ -342,7 +350,7 @@ export class OidcAdmission {
     const body = await formBody(req)
     if (session === undefined || body?.get('csrf') !== session.csrf)
       return plain(res, 403, 'forbidden\n')
-    this.sessions.delete(value)
+    await this.sessions.delete(value)
     let destination = this.config.publicOrigin.href
     try {
       destination = (await this.protocol.logoutUrl(await this.secret()))?.href ?? destination

@@ -100,6 +100,16 @@ describe('DSH_OIDC_* environment precedence', () => {
     expect(() => readEnvironment({ DSH_OIDC_SENDER_CONTEXT: '1' }, {})).toThrow(/true or false/u)
   })
 
+  it('reads DSH_OIDC_PERSIST_SESSIONS as a strict boolean and keeps sessions in memory by default', () => {
+    const layer = readEnvironment({ ...env, DSH_OIDC_PERSIST_SESSIONS: 'true' }, row)
+    expect(layer.fields).toContain('persistSessions')
+    expect(resolveConfig(applyEnvironment(row, layer)).persistSessions).toBe(true)
+    expect(resolveConfig(applyEnvironment(row, readEnvironment(env, row))).persistSessions).toBe(
+      false,
+    )
+    expect(() => readEnvironment({ DSH_OIDC_PERSIST_SESSIONS: 'on' }, {})).toThrow(/true or false/u)
+  })
+
   it('needs an issuer for bare subjects', () => {
     expect(() => readEnvironment({ DSH_OIDC_ALLOWED_SUBJECTS: '["s"]' }, {})).toThrow(/issuer/u)
   })

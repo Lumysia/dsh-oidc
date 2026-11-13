@@ -6,7 +6,7 @@ This is a maintained fork of [Senti100/dsh-oidc](https://github.com/Senti100/dsh
 
 ## Security architecture
 
-This package is a DSH bundle with a Host plugin and a small browser half. The Host plugin registers `/auth/login`, `/auth/callback`, `/auth/check`, `/auth/signin`, `/auth/logout`, and the profile read `/_dsh-oidc/session`; it does **not** replace or copy `@deepseek-ai/dsh-client-connection`. After validating the ID token and admission policy, it creates a short-lived opaque in-memory session and redirects through `ctx.connection.authenticatedUrl(publicOrigin)` so DSH mints its own native browser cookie.
+This package is a DSH bundle with a Host plugin and a small browser half. The Host plugin registers `/auth/login`, `/auth/callback`, `/auth/check`, `/auth/signin`, `/auth/logout`, and the profile read `/_dsh-oidc/session`; it does **not** replace or copy `@deepseek-ai/dsh-client-connection`. After validating the ID token and admission policy, it creates a short-lived opaque session (in memory, or also persisted with `persistSessions`) and redirects through `ctx.connection.authenticatedUrl(publicOrigin)` so DSH mints its own native browser cookie.
 
 A reverse proxy is a mandatory part of the security boundary. It must send **only** `/auth/login`, `/auth/callback`, `/auth/check`, `/auth/signin`, and `/auth/logout` directly to DSH, deny unmatched `/auth/*`, and guard **every other path** (root, static assets, `/api`, uploads, SSE/streams, WebSocket upgrades, and `/_dsh-oidc/session`) with `forward_auth /auth/check`. Strip `Connection` and `Upgrade` on the auth-check subrequest only, preserving the application proxy's WebSocket upgrade. Before proxying, Caddy strips browser-supplied authorization, proxy-authorization, identity aliases, and `X-Dsh-Oidc-Client-Ip`, then sets that dedicated header from its connection-observed `{remote_host}`. A stale native DSH cookie is not sufficient after the OIDC session is removed. DSH must be reachable only by the proxy. For a strictly HTTPS-only origin, do not expose HTTP port 80 at the address; an automatic redirect or HSTS cannot protect an already-stored non-`Secure` native cookie before its first HTTP request. The proxy example marks **new** native cookies `Secure`, but cannot repair cookies already stored by a browser. [`examples/nginx.conf`](examples/nginx.conf) and [`examples/traefik/`](examples/traefik/) apply the same rules for nginx and Traefik; Traefik cannot add `Secure`. See the [deployment guide](docs/deployment.md).
 
@@ -54,6 +54,7 @@ Values for the site are supplied by the environment of the DSH process. Any vari
 | `DSH_OIDC_DIRECT_LOGIN`      | `directLogin`     | `true` or `false`                                                        |
 | `DSH_OIDC_ALLOW_ANY_USER`    | `allowAnyUser`    | `true` or `false`                                                        |
 | `DSH_OIDC_SENDER_CONTEXT`    | `senderContext`   | `true` or `false`                                                        |
+| `DSH_OIDC_PERSIST_SESSIONS`  | `persistSessions` | `true` or `false`                                                        |
 
 A malformed value stops the plugin with a message naming the variable, never the value. At startup the log names which fields came from the environment.
 
@@ -76,6 +77,7 @@ DSH's Plugins page edits only fields a plugin declares volatile, and this plugin
 | `directLogin`               | Send signed-out browser navigations straight to the provider instead of the bundled sign-in page (default `false`).                                                 |
 | `allowAnyUser`              | Admit every account the provider signs in, when access is already restricted at the provider (an application group, for example). Default `false`.                  |
 | `senderContext`             | Tell the model who wrote each Web prompt (see [Sender context](#sender-context)). Default `false`.                                                                  |
+| `persistSessions`           | Keep sign-ins across DSH restarts (see [Session persistence](#session-persistence)). Default `false`.                                                               |
 
 At least one allow category is mandatory unless `allowAnyUser` is `true`; it cannot be switched on by an empty list or a missing value. Every configured category is ANDed; values within subject, email, and `any` group categories are ORed. Match comparison is byte-exact with no case folding or substring behavior. Explicit empty policy lists are invalid. Group claims must be nonempty bounded arrays of unique nonempty bounded strings; scalar groups always deny. Custom required claims may be one bounded nonempty string or the same bounded unique-string array shape.
 
@@ -91,6 +93,12 @@ The name is `preferred_username`, then `name`, then `email`, with anything that 
 
 Only the server-side session decides: the plugin looks up its own HttpOnly session cookie on the `/api` request that admits the prompt (DSH's `connection/request` hook) and reads nothing else the browser sends. Prompts from anywhere else (other channel plugins, scheduled jobs, subagents, messages an agent sends to another session) get no line, including work that a Web request started but that runs after it. This is recognition, not isolation: everyone signed in still shares one DSH. The line goes to the session's model provider with the prompt, which is why it is off by default.
 
+### Session persistence
+
+By default sessions live only in process memory, so a DSH restart signs everyone out. With `persistSessions: true` they are also kept in DSH's own storage, in `storages/dsh_oidc_sessions.json` under the DSH home, which DSH writes atomically with mode `0600` in a `0700` directory. The routes register only after the stored sessions are loaded; if the store cannot be opened, nothing registers and the proxy keeps denying.
+
+Each record is keyed by the SHA-256 digest of the 256-bit random cookie value, never the value itself, so a copy of the file cannot be turned into a working cookie. It holds the same display claims as the in-memory session, the logout CSRF value, its timestamps, and a fingerprint of the issuer, client ID and allow policy. On startup a record is dropped and deleted when that fingerprint differs (so narrowing the policy and restarting still signs out everyone admitted under the old rules), when it is past the absolute or idle limit as currently configured, or when it is beyond `maxSessions` (the most recently used are kept). Logout deletes the record before it answers. The last-use time is written at most once a minute, so after a restart a session can idle out up to a minute early, never late.
+
 See the [deployment guide](docs/deployment.md), the bundle layer [`cordis.patch.yml`](cordis.patch.yml), [`examples/Caddyfile`](examples/Caddyfile), and [`.env.example`](.env.example). Before sign-in, the bare root returns 401 to API clients; a **browser navigation** is redirected to the bundled sign-in page at `/auth/signin`, whose Sign-in button starts OIDC at `/auth/login`. With `directLogin: true` the navigation goes straight to `/auth/login` and the provider instead. The redirect triggers only on `sec-fetch-mode: navigate` (or an HTML-only `Accept` when the header is absent); `fetch`/XHR/WebSocket subrequests keep the plain 401 because Caddy's `forward_auth` subrequest copies no such navigation signals. The page is self-contained inline HTML with a strict CSP and no external assets. The package is not published to npm; install a GitHub release tarball or one built from this checkout. The client secret value stays behind `ctx.credentials`; only its reference name is configuration.
 
 ## Protocol behavior
@@ -105,8 +113,8 @@ See the [deployment guide](docs/deployment.md), the bundle layer [`cordis.patch.
 
 ## Known limits
 
-- **Sessions live in process memory.** Every DSH restart (upgrade, crash, host reboot) signs everyone out and fails logins in progress; users simply sign in again. For the one-user or small-team setups this targets that is rare and cheap, so there is no persistent session store. It also means a single DSH process: replicas would not share sessions.
-- Provider-side account or group changes reach an existing session only at its idle or absolute expiry, or at restart.
+- **Sessions live in process memory by default.** Every DSH restart (upgrade, crash, host reboot) signs everyone out and fails logins in progress; users simply sign in again. `persistSessions: true` keeps finished sign-ins across restarts (logins in progress still fail). Either way this is a single DSH process: replicas would not share sessions.
+- Provider-side account or group changes reach an existing session only at its idle or absolute expiry, or at restart (with `persistSessions`, only when the local allow policy changed too).
 - Logout ends the outer session; DSH's native cookie cannot be revoked on its own, which is why the proxy gate is mandatory.
 
 ## Local development
