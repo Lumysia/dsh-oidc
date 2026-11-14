@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-alpha.5
 
 - Add `persistSessions` (`DSH_OIDC_PERSIST_SESSIONS`), off by default: sessions are also kept in DSH's storage (`storages/dsh_oidc_sessions.json`, mode 0600, keyed by the SHA-256 of the cookie value), so a DSH restart no longer signs everyone out. Restored sessions keep the configured absolute and idle limits, logout deletes the record before answering, and a changed issuer, client or allow policy drops every stored session.
 
